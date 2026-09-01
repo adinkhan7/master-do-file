@@ -1,40 +1,102 @@
-*! _mdfgen_defs.ado  —  Mata code-generation layer for the Master DO File framework
-*! version 10.1.0
+*! _mdf_defs.ado — the Mata layer for the Master DO File framework
+*! version 10.1.0   github.com/adinkhan7/master-do-file
 *!
-*!  Loaded on demand by mdfgen.ado.  Never run this file directly.
+*!  Loaded on demand by _mdf_load.ado. Never run this file directly.
 *!
-*!  Why .ado and not .do:  `net install` only ships a package's PROGRAM files.
-*!  A .do file is classed as ancillary and is left behind for `net get`, so it
-*!  would never reach the adopath.  The extension is the only reason; nothing
-*!  in here defines an ado-command.  mdfgen.ado locates it with -findfile- and
-*!  runs it with -qui do-.
+*!  Why .ado and not .do: `net install` ships only a package's PROGRAM files.
+*!  A .do is classed as ancillary and left for `net get`, so it would never
+*!  reach the adopath. Nothing here defines an ado-command; the extension is
+*!  the only reason.
 *!
-*!  This file holds the Mata layer that WRITES the project's pipeline DO files.
-*!  It was lifted verbatim out of Master_DO_File 10.1.0-rc1 (Sections 10 and 14)
-*!  so that the generator can be versioned and installed with `net install`
-*!  instead of being carried inside every copy of Master.
-*!
-*!  Two entry points are exposed:
-*!      mdfgen_directory_main()   — writes 00_Directory.do / 00a_Bootstrap.do /
-*!                                  00b_Local_Overrides.do        (was Section 10)
-*!      mdfgen_modules_main()     — writes the pipeline modules, the HFC DO and
-*!                                  the Processing DO             (was Section 14)
-*!  Both read their inputs from the CALLING ado's locals via st_local(), exactly
-*!  as the original in-Master blocks did.  The generated output is byte-identical.
+*!  Contents:
+*!    _hfc_find_root / _hfc_scan_locks / _hfc_rename_dir   framework helpers
+*!    mdf_directory_main()                                 writes 00_Directory,
+*!                                                         00a_Bootstrap, 00b_Overrides
+*!    mdf_modules_main()                                   writes the pipeline modules,
+*!                                                         the HFC DO and Processing.do
+*!  The generator functions were lifted verbatim out of Master 10.1.0-rc1
+*!  Sections 10 and 14 and produce byte-identical output.
 
-*  matastrict is forced off while these compile.  The driver code below used to
-*  run at Mata's interactive level, where matastrict does not apply; wrapping it
-*  in a function brings it under the setting for the first time.  The caller's
-*  own preference is restored immediately afterwards.
-local _mdfgen_ms = c(matastrict)
+*  matastrict is forced off while these compile: the generator driver code used
+*  to run at Mata's interactive level, where matastrict does not apply, and
+*  wrapping it in a function brings it under the setting for the first time.
+local _mdf_ms = c(matastrict)
 mata: mata set matastrict off
 
 mata:
 
-//  probe: mdfgen.ado calls this to decide whether a (re)load is needed
-void mdfgen_probe()
+//  probe: _mdf_load calls this to decide whether a (re)load is needed
+void mdf_probe()
 {
     return
+}
+
+string scalar _hfc_find_root(string scalar start, real scalar maxup)
+{
+    string scalar p
+    real scalar i, j
+
+    p = subinstr(start, "\", "/", .)
+    if (strlen(p) > 1 & substr(p, -1, 1) == "/") p = substr(p, 1, strlen(p) - 1)
+
+    for (i = 0; i <= maxup; i++) {
+        if (fileexists(p + "/.hfc_root")) return(p)
+        j = strrpos(p, "/")
+        if (j <= 0) break
+        p = substr(p, 1, j - 1)
+        if (strlen(p) < 3) break          // reached a drive root such as "C:"
+    }
+    return("")
+}
+
+void _hfc_scan_locks(string scalar d)
+{
+    string colvector f, sub
+    string scalar    acc
+    real scalar      i, n
+    if (!direxists(d)) return
+    acc = st_global("hfc_capi_locks")
+    n   = strtoreal(st_global("hfc_capi_nlock"))
+    f = dir(d, "files", "*.xlsx")
+    for (i = 1; i <= length(f); i++) {
+        if (substr(f[i], 1, 2) == "~$") {
+            n = n + 1
+            acc = acc + (acc == "" ? "" : " ") + subinstr(f[i], "~$", "", 1)
+        }
+    }
+    st_global("hfc_capi_locks", acc)
+    st_global("hfc_capi_nlock", strofreal(n))
+    sub = dir(d, "dirs", "*")
+    for (i = 1; i <= length(sub); i++) _hfc_scan_locks(d + "/" + sub[i])
+}
+
+void _hfc_rename_dir(string scalar old_p, string scalar new_p)
+{
+    real scalar i
+    string colvector flist
+    string scalar dq, src, dst
+
+    dq = char(34)
+    if (!direxists(old_p)) {
+        errprintf("_hfc_rename_dir: source directory not found: %s\n", old_p)
+        exit(198)
+    }
+    if (!direxists(new_p)) mkdir(new_p)
+
+flist = dir(old_p, "files", "*")
+    for (i = 1; i <= rows(flist); i++) {
+        src = old_p + "/" + flist[i]
+        dst = new_p + "/" + flist[i]
+        stata("copy " + dq + src + dq + " " + dq + dst + dq + ", replace")
+        if (!fileexists(dst)) {
+            errprintf(
+                "_hfc_rename_dir: copy failed for '%s'. Source directory left intact to prevent data loss.\n",
+                flist[i])
+            exit(198)
+        }
+        unlink(src)
+    }
+    rmdir(old_p)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -602,7 +664,7 @@ void generate_local_overrides(string scalar p, string scalar q)
 }
 
 //  entry point: was the driver at the tail of Section 10's mata block
-void mdfgen_directory_main()
+void mdf_directory_main()
 {
     string scalar q, bt, ap, dol, bs
     string scalar pname, ssize, meta, tail_v, tstart, tend, nds
@@ -2209,7 +2271,7 @@ else {
 }
 
 //  entry point: was the driver at the tail of Section 14's mata block
-void mdfgen_modules_main()
+void mdf_modules_main()
 {
     string scalar q, bt, ap, dol, bs
     string scalar pname, ssize, meta, tail_v, tstart, tend, nds
@@ -2755,6 +2817,7 @@ void mdfgen_modules_main()
     write_processing_do(procdir, procfile, tver, pname, q, bt, ap, dol, nds)
 }
 
+
 end
 
-mata: mata set matastrict `_mdfgen_ms'
+mata: mata set matastrict `_mdf_ms'

@@ -2,4 +2,4 @@ v 3
 d Master DO File — Stata packages
 d Adin Khan  ·  https://github.com/adinkhan7/master-do-file
 d
-p mdfgen  code-generation layer for the Master DO File survey pipeline
+p mdf  the Master DO File survey pipeline framework

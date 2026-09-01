@@ -1,0 +1,46 @@
+v 3
+d mdf — the Master DO File survey pipeline framework
+d
+d Turns raw SurveyCTO exports into a managed survey-processing pipeline:
+d builds the project tree, imports and archives data, applies CAPI value
+d labels, runs High-Frequency Checks, manages open-ended translation,
+d optionally merges paired datasets.
+d
+d A project's Master_DO_File.do carries only Section 0 (the switches) and
+d the list of pipeline stages. Everything under the hood is installed from
+d here.
+d
+d Requires: Stata 16 or newer.
+d
+d Distribution-Date: 20260901
+d Author: Adin Khan
+d Support: https://github.com/adinkhan7/master-do-file
+f _hfc_abort.ado
+f _hfc_archive_instruments.ado
+f _hfc_capi_lockcheck.ado
+f _hfc_dirof.ado
+f _hfc_hide.ado
+f _hfc_mkdir.ado
+f _hfc_pause.ado
+f _mdf_defs.ado
+f _mdf_load.ado
+f mdf.ado
+f mdf_audio.ado
+f mdf_clean.ado
+f mdf_folders.ado
+f mdf_generate.ado
+f mdf_guards.ado
+f mdf_hfc.ado
+f mdf_import.ado
+f mdf_instruments.ado
+f mdf_keys.ado
+f mdf_log.ado
+f mdf_modules.ado
+f mdf_paths.ado
+f mdf_readme.ado
+f mdf_resolve.ado
+f mdf_setup.ado
+f mdf_stage.ado
+f mdf_validate.ado
+f mdf_workdirs.ado
+f mdf.sthlp
