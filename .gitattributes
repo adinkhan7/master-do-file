@@ -1,0 +1,13 @@
+#  Stata reads either line ending, but this project has already shipped one
+#  CRLF bug (a breadcrumb written CRLF and read back with the CR attached,
+#  which silently invalidated same-day rerun protection on every Windows run).
+#  Pin the package to LF so what GitHub serves to `net install` is byte-stable
+#  regardless of the contributor's platform.
+* text=auto eol=lf
+
+*.ado   text eol=lf
+*.do    text eol=lf
+*.sthlp text eol=lf
+*.pkg   text eol=lf
+*.toc   text eol=lf
+*.md    text eol=lf
