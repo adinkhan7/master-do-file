@@ -1,0 +1,16 @@
+v 3
+d mdfgen — code-generation layer for the Master DO File survey pipeline
+d
+d Writes the pipeline DO files that a Master DO File project runs:
+d 00_Directory.do, 00a_Bootstrap.do, 00b_Local_Overrides.do, the
+d labeling / translation / audio / finalise / core-variable modules,
+d the project HFC DO and the Processing DO.
+d
+d Requires: Stata 16 or newer.
+d
+d Distribution-Date: 20260901
+d Author: Adin Khan
+d Support: https://github.com/adinkhan7/master-do-file
+f mdfgen.ado
+f _mdfgen_defs.ado
+f mdfgen.sthlp
