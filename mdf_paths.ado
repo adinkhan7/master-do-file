@@ -1,5 +1,5 @@
 *! mdf_paths.ado — Master DO File pipeline stage 3 of 18
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  run dates and every folder path global
 

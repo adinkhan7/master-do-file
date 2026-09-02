@@ -1,5 +1,5 @@
 *! _mdf_load.ado — bring the Mata layer into memory
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  The guard probes MATA, not a global flag, and that distinction is
 *!  load-bearing. `clear all` drops programs and wipes Mata but LEAVES GLOBALS

@@ -1,5 +1,5 @@
 *! mdf_generate.ado — Master DO File pipeline stage 9 of 18
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  00_Directory / 00a_Bootstrap / 00b_Overrides, output paths, previous keys
 
@@ -31,9 +31,6 @@ program define mdf_generate
     local _nds     "1"   // placeholder; actual_n_dta is auto-detected inside 00_Directory.do
     _mdf_load
     mata: mdf_directory_main()
-
-    di as result "Master DO files: OK"
-    di as result "  → 00_Directory.do and 00a_Bootstrap.do refreshed."
 
     *  ── Exit cleanly on Run 1 ──────────────────────────────────────────────────
     if $hfcsys_n_raw == 0 & "$hfc_postfield_active" != "1" {

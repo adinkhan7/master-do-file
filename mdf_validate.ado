@@ -1,5 +1,5 @@
 *! mdf_validate.ado — Master DO File pipeline stage 2 of 18
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  Section 0 sanity checks and switch defaults
 

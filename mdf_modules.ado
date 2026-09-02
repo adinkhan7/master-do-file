@@ -1,5 +1,5 @@
 *! mdf_modules.ado — Master DO File pipeline stage 11 of 18
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  pipeline modules, the HFC DO and the Processing DO
 
@@ -73,4 +73,70 @@ program define mdf_modules
     local _nds      "$actual_n_dta"   // force the generator loops to the exact DTA count
     _mdf_load
     mata: mdf_modules_main()
+
+    *  ── Retire framework files nothing references any more ─────────────────
+    *  10.1.1 turned 00a_Bootstrap.do, 04_Finalise.do and 05_Core_Variables.do
+    *  into package commands (mdf_bootstrap, mdf_finalise, mdf_core_vars).
+    *
+    *  They are NOT removed on sight. A project whose generated modules are
+    *  still on an older template goes on calling them by name, and Tier 2
+    *  protection means those modules are not rewritten — they get a .new beside
+    *  them for the analyst to merge. Deleting the file first would break the
+    *  project until that merge happened, which is precisely the silent breakage
+    *  this framework exists to avoid.
+    *
+    *  So each file is removed only once nothing in the project still refers to
+    *  it. The check runs every time, so a project converges to five files in
+    *  04_DO Files/ as soon as its modules are current, and never breaks getting
+    *  there. Tier 2 files are renamed, never deleted: an analyst was allowed to
+    *  edit them.
+    *  Order matters: 04_Finalise.do and 05_Core_Variables.do both carry the
+    *  old standalone header that calls 00a_Bootstrap.do, so they have to be
+    *  retired first or they keep it alive for an extra run.
+    foreach _ret in 04_Finalise 05_Core_Variables 00a_Bootstrap {
+        cap confirm file "$dofiles_dir/`_ret'.do"
+        if _rc continue
+
+        local _refs 0
+        foreach _rd in "$dofiles_dir" "$hfc_dir" "$processing_dir" {
+            local _rlist : dir "`_rd'" files "*.do", respectcase
+            foreach _rf of local _rlist {
+                if "`_rf'" == "`_ret'.do" continue
+                tempname _rfh
+                cap file open `_rfh' using "`_rd'/`_rf'", read text
+                if _rc continue
+                file read `_rfh' _rline
+                while r(eof) == 0 {
+                    if strpos(`"`_rline'"', "`_ret'.do") > 0 {
+                        local _refs = `_refs' + 1
+                        continue, break
+                    }
+                    file read `_rfh' _rline
+                }
+                cap file close `_rfh'
+            }
+        }
+
+        if `_refs' > 0 {
+            di as txt "  `_ret'.do kept — `_refs' file(s) still call it by name."
+            continue
+        }
+
+        if "`_ret'" == "00a_Bootstrap" {
+            cap erase "$dofiles_dir/00a_Bootstrap.do"
+            if !_rc di as result "  Retired 00a_Bootstrap.do — the mdf_bootstrap command replaces it."
+        }
+        else {
+            cap copy "$dofiles_dir/`_ret'.do" "$dofiles_dir/`_ret'.do.superseded", replace
+            if !_rc {
+                cap erase "$dofiles_dir/`_ret'.do"
+                di as result _n "  Retired `_ret'.do — nothing calls it any more."
+                if "`_ret'" == "04_Finalise"       di as txt "    The pipeline now calls: mdf_finalise"
+                if "`_ret'" == "05_Core_Variables" di as txt "    The pipeline now calls: mdf_core_vars"
+                di as txt "    Your copy was kept as `_ret'.do.superseded. If you had edited"
+                di as txt "    it, re-apply those changes or keep calling your copy explicitly."
+            }
+        }
+    }
+
 end

@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 10.1.0  01sep2026}{...}
+{* *! version 10.1.1  01sep2026}{...}
 {vieweralsosee "[R] net" "help net"}{...}
 {viewerjumpto "Syntax" "mdf##syntax"}{...}
 {viewerjumpto "Description" "mdf##description"}{...}
@@ -60,7 +60,7 @@ once in that session.
 {synopt :{bf:mdf_resolve}}post-field resolution{p_end}
 {synopt :{bf:mdf_workdirs}}today's raw-data folder and HFC run folder{p_end}
 {synopt :{bf:mdf_log}}open the run log and detect the run type{p_end}
-{synopt :{bf:mdf_generate}}00_Directory / 00a_Bootstrap / 00b_Overrides, output paths, previous keys{p_end}
+{synopt :{bf:mdf_generate}}00_Directory.do / 00b_Local_Overrides.do, output paths, previous keys{p_end}
 {synopt :{bf:mdf_import}}carry the import DO forward, fingerprint it, import{p_end}
 {synopt :{bf:mdf_modules}}pipeline modules, the HFC DO and the Processing DO{p_end}
 {synopt :{bf:mdf_guards}}stale-processing and open-workbook guards{p_end}
@@ -71,6 +71,22 @@ once in that session.
 {synopt :{bf:mdf_audio}}audio audit{p_end}
 {synopt :{bf:mdf_keys}}archive keys and print the run summary{p_end}
 {synoptline}
+
+{pstd}
+Three further commands are called by the {it:generated} pipeline files rather
+than by Master, and replace DO files those projects used to carry:
+
+{synoptset 20 tabbed}{...}
+{synopt :{bf:mdf_bootstrap}}load a project's globals from inside a generated module (was {bf:00a_Bootstrap.do}){p_end}
+{synopt :{bf:mdf_core_vars}}derive {bf:fielddate} / {bf:total_duration} (was {bf:05_Core_Variables.do}){p_end}
+{synopt :{bf:mdf_finalise}}post-cleaning merge and publish (was {bf:04_Finalise.do}){p_end}
+{synoptline}
+
+{pstd}
+A project's {bf:04_DO Files/} therefore holds five files, not eight: the
+Master-owned {bf:00_Directory.do}, and the four an analyst may edit —
+{bf:00b_Local_Overrides.do}, {bf:01_Labeling.do}, {bf:02_Translation.do} and
+{bf:03_Audio.do}.
 
 
 {marker remarks}{...}

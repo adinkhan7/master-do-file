@@ -26,7 +26,10 @@ f _mdf_defs.ado
 f _mdf_load.ado
 f mdf.ado
 f mdf_audio.ado
+f mdf_bootstrap.ado
 f mdf_clean.ado
+f mdf_core_vars.ado
+f mdf_finalise.ado
 f mdf_folders.ado
 f mdf_generate.ado
 f mdf_guards.ado

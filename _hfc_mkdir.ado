@@ -1,5 +1,5 @@
 *! _hfc_mkdir.ado — Master DO File framework helper
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  Create a directory if it is not already there, and say so if it cannot.
 *!

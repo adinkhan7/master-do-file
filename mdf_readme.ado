@@ -1,5 +1,5 @@
 *! mdf_readme.ado — Master DO File pipeline stage 5 of 18
-*! version 10.1.0   github.com/adinkhan7/master-do-file
+*! version 10.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  write the project README
 
@@ -39,13 +39,10 @@ program define mdf_readme
         file write `_mf' "| 03_HFC/KEYS/ | key snapshots, breadcrumb, issue-flag stores | 1 |" _n
         file write `_mf' "| 03_HFC/NN_..._HFC_YYYYMMDD/ | one folder per run: report, audio list, log, datasets | 1 |" _n
         file write `_mf' "| 04_DO Files/00_Directory.do | all path globals; single source of truth | 1 |" _n
-        file write `_mf' "| 04_DO Files/00a_Bootstrap.do | finds the project and loads the helpers | 1 |" _n
         file write `_mf' "| 04_DO Files/00b_Local_Overrides.do | your machine-specific overrides | 3 |" _n
         file write `_mf' "| 04_DO Files/01_Labeling.do | CAPI value labels via ODKSplit | 2 |" _n
         file write `_mf' "| 04_DO Files/02_Translation.do | open-ended export/re-import round trip | 2 |" _n
         file write `_mf' "| 04_DO Files/03_Audio.do | audio sampling for back-checks | 2 |" _n
-        file write `_mf' "| 04_DO Files/04_Finalise.do | post-cleaning merge + publish | 2 |" _n
-        file write `_mf' "| 04_DO Files/05_Core_Variables.do | derives fielddate + total_duration | 2 |" _n
         file write `_mf' "| 05_Translation/ | 01_Exported (sent out), 02_Translated (returned) | analyst work |" _n
         file write `_mf' "| 06_Processing Files/${project_name}_Processing.do | THE cleaning file; produces the cleaned dataset | 2 |" _n
         file write `_mf' "| 07_Cleaned Dataset/ | current cleaned data — what every consumer reads | 1 |" _n _n
@@ -88,16 +85,16 @@ program define mdf_readme
         file write `_mf' "   dataset in memory. No _LABELED_ file is written." _n
         file write `_mf' "2. **Apply translations** — anything returned in 05_Translation/02_Translated/" _n
         file write `_mf' "   is injected BEFORE your cleaning runs, so your rules see translated text." _n
-        file write `_mf' "3. **Core variables** — 05_Core_Variables.do derives fielddate from starttime" _n
+        file write `_mf' "3. **Core variables** — mdf_core_vars derives fielddate from starttime" _n
         file write `_mf' "   and total_duration from duration, when the import did not supply them." _n
         file write `_mf' "4. **Your cleaning** — SECTION A (field fixes that must reach today's HFC)" _n
         file write `_mf' "   then SECTION B (final recodes). Both always run, every day." _n
         file write `_mf' "5. **Save** — the cleaned dataset, dated, into the run folder." _n _n
         file write `_mf' "Then once, after all datasets:" _n _n
-        file write `_mf' "6. **Merge** — 04_Finalise.do, if merge_required = 1." _n
+        file write `_mf' "6. **Merge** — mdf_finalise merge, if merge_required = 1." _n
         file write `_mf' "7. **Export open-ended** — only if exportopenended = 1. It runs after" _n
         file write `_mf' "   cleaning so a translator receives cleaned rows, not raw ones." _n
-        file write `_mf' "8. **Publish** — 04_Finalise.do copies each cleaned dataset to" _n
+        file write `_mf' "8. **Publish** — mdf_finalise publish copies each cleaned dataset to" _n
         file write `_mf' "   07_Cleaned Dataset/ under a stable, undated name." _n _n
         file write `_mf' "Defaults when you launch the processing file on its own: labeling and applying" _n
         file write `_mf' "translations are ON, exporting is OFF. Producing cleaned data never sends" _n
@@ -136,7 +133,7 @@ program define mdf_readme
         file write `_mf' "## Missing core variables" _n
         file write `_mf' "" _n
         file write `_mf' "The checks need key, enum, fielddate and duration. When an import does not" _n
-        file write `_mf' "supply fielddate or total_duration, 05_Core_Variables.do derives them from" _n
+        file write `_mf' "supply fielddate or total_duration, mdf_core_vars derives them from" _n
         file write `_mf' "starttime and duration. If a variable cannot be derived at all, the checks" _n
         file write `_mf' "that need it are skipped with a message rather than failing the run." _n
         file write `_mf' "" _n

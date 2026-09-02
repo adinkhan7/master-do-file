@@ -119,6 +119,9 @@ entire reason `_mdf_defs.ado` carries an `.ado` extension despite defining no ad
 ```
 mdf.ado                     `mdf run` / `mdf version`
 mdf_<stage>.ado             the 18 pipeline stages, in execution order
+mdf_bootstrap.ado           load a project's globals inside a generated module
+mdf_core_vars.ado           derive fielddate / total_duration
+mdf_finalise.ado            post-cleaning merge and publish
 _hfc_abort.ado              stop: a real error (exit 198)
 _hfc_pause.ado              stop: a workflow checkpoint (exit 0) — never the same thing
 _hfc_mkdir.ado              create a directory if absent
@@ -135,12 +138,29 @@ mdf.pkg                     package manifest — a file not listed here does not
 
 ---
 
+## What a project folder holds
+
+`04_DO Files/` holds five files, not eight (ADR-055). `00a_Bootstrap.do`, `04_Finalise.do` and
+`05_Core_Variables.do` are commands in this package now.
+
+| file | |
+|---|---|
+| `00_Directory.do` | project-specific: every path global and Section 0 value, Master-owned |
+| `00b_Local_Overrides.do` | analyst-owned; the only override surface that survives regeneration |
+| `01_Labeling.do` / `02_Translation.do` / `03_Audio.do` | analyst-owned (Tier 2) |
+
+Retirement is reference-aware: a file is removed only once nothing in the project still calls it by
+name, so a project on older generated modules keeps working until the analyst merges the `.new`
+files. Tier 2 files are renamed to `.superseded`, never deleted.
+
+---
+
 ## Versioning
 
 Master pins the framework it was written against:
 
 ```stata
-global mdf_required "10.1.0"      // Section 0
+global mdf_required "10.1.1"      // Section 0
 ```
 
 `mdf_setup` compares that against the installed version and updates only on a mismatch.
