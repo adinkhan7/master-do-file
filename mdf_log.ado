@@ -1,4 +1,4 @@
-*! mdf_log.ado — Master DO File pipeline stage 8 of 18
+*! mdf_log.ado — Master DO File pipeline stage 8 of 19
 *! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  open the run log and detect the run type

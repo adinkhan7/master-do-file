@@ -28,6 +28,7 @@ f mdf.ado
 f mdf_audio.ado
 f mdf_bootstrap.ado
 f mdf_clean.ado
+f mdf_deliverables.ado
 f mdf_core_vars.ado
 f mdf_finalise.ado
 f mdf_folders.ado

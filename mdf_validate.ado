@@ -1,4 +1,4 @@
-*! mdf_validate.ado — Master DO File pipeline stage 2 of 18
+*! mdf_validate.ado — Master DO File pipeline stage 2 of 19
 *! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  Section 0 sanity checks and switch defaults
@@ -28,7 +28,7 @@ program define mdf_validate
         }
     }
 
-    foreach _sw in run_import run_labeling run_translation run_processing run_hfc run_audio {
+    foreach _sw in run_import run_labeling run_translation run_processing run_hfc run_audio run_deliverables {
         if "${`_sw'}" == "" global `_sw' 0
     }
 
