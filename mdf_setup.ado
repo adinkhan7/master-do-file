@@ -1,5 +1,5 @@
 *! mdf_setup.ado — Master DO File pipeline stage 1 of 18
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  helper programs, ROOT resolution, framework identity
 
@@ -10,7 +10,7 @@ program define mdf_setup
     _mdf_load
 
 
-    global hfc_version                "10.1.1"
+    global hfc_version                "10.2.0"
     global hfc_layout_version         "v10"
     global hfcsys_clean_delta_pct_max 5
     global hfcsys_required_vars       "key enum fielddate duration"

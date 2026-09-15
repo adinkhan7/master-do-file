@@ -1,5 +1,5 @@
 *! mdf_finalise.ado — post-cleaning merge and publish
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  Replaces the generated 04_DO Files/04_Finalise.do (ADR-055). The logic is
 *!  unchanged; only the standalone header it used to carry is gone, because an

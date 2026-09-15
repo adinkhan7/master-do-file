@@ -1,5 +1,5 @@
 *! mdf_guards.ado — Master DO File pipeline stage 12 of 18
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  stale-processing and open-workbook guards
 

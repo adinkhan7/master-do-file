@@ -1,5 +1,5 @@
 *! mdf_hfc.ado — Master DO File pipeline stage 16 of 18
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  run the high-frequency checks
 

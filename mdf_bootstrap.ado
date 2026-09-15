@@ -1,5 +1,5 @@
 *! mdf_bootstrap.ado — load a project's globals from inside a generated pipeline file
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  Replaces the generated 04_DO Files/00a_Bootstrap.do (ADR-055).
 *!

@@ -1,5 +1,5 @@
 *! _mdf_defs.ado — the Mata layer for the Master DO File framework
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  Loaded on demand by _mdf_load.ado. Never run this file directly.
 *!
@@ -806,7 +806,9 @@ void write_root_resolution(real scalar fh, string scalar q, string scalar bt,
 void write_selection_guard(real scalar fh, string scalar q, string scalar bt, string scalar ap, string scalar dol, string scalar pname)
 {
     fput(fh, "/* Secondary guard: reloads directory if globals were cleared mid-execution */")
-    fput(fh, "if " + q + dol + "hfc_dofiles_dir" + q + " == " + q + q + " {")
+    fput(fh, "/* Never in standalone mode: there is no 00_Directory.do to reload, and the")
+    fput(fh, "   cache below names a project this file is no longer part of (ADR-056).   */")
+    fput(fh, "if " + q + dol + "hfc_dofiles_dir" + q + " == " + q + q + " & " + q + dol + "mdf_standalone" + q + " != " + q + "1" + q + " {")
     fput(fh, "    local _sg_root " + bt + "c(pwd)" + ap)
     fput(fh, "    cap confirm file " + q + bt + "_sg_root" + ap + "/.hfc_root" + q)
     fput(fh, "    if _rc {")
@@ -959,8 +961,17 @@ void write_labeling_module(
     fput(fh, "*==============================================================================*")
     fput(fh, "")
     fput(fh, "*  ── Switch Protocol defaults (safe when run standalone) ────────────────────")
-    fput(fh, "global hfc_label_explicit 1")
-    fput(fh, "if " + q + dol + "run_labeling" + q + " == " + q + q + " & " + q + dol + "run_label" + q + " == " + q + q + " global hfc_label_explicit 0")
+    //  Decide once per session, not once per call. Lines below default
+    //  run_labeling to 1, so a Processing DO that calls this module for DS2
+    //  would find the switch already set and conclude labeling had been asked
+    //  for explicitly — aborting on a missing form where the DS1 call had
+    //  warned and carried on. Master always sets run_labeling, so inside a
+    //  project this resolves to 1 on the first call and stays there: unchanged
+    //  (ADR-056).
+    fput(fh, "if " + q + dol + "hfc_label_explicit" + q + " == " + q + q + " {")
+    fput(fh, "    global hfc_label_explicit 1")
+    fput(fh, "    if " + q + dol + "run_labeling" + q + " == " + q + q + " & " + q + dol + "run_label" + q + " == " + q + q + " global hfc_label_explicit 0")
+    fput(fh, "}")
     fput(fh, "if " + q + dol + "run_labeling" + q + " == " + q + q + " global run_labeling " + dol + "run_label")
     fput(fh, "if " + q + dol + "run_labeling" + q + " == " + q + q + " global run_labeling 1")
     fput(fh, "global run_label " + q + dol + "run_labeling" + q)
@@ -1017,7 +1028,13 @@ void write_labeling_module(
     fput(fh, "        di as result " + q + "  CAPI detection: Strategy A (name-based)" + q)
     fput(fh, "        forvalues _i = 1/" + dol + "actual_n_dta {")
     fput(fh, "            if " + q + dol + "{ds" + bt + "_i" + ap + "_capi}" + q + " == " + q + q + " {")
-    fput(fh, "                if " + q + dol + "run_label" + q + " == " + q + "1" + q + " {")
+    //  The single-dataset branch gates its abort on hfc_label_explicit too:
+    //  it aborts when labeling was ASKED for, and degrades when the default
+    //  merely switched it on. The multi-dataset branches did not, so the same
+    //  project with two forms hard-stopped where one form warned. Inside a
+    //  managed project Master always sets run_labeling, so hfc_label_explicit
+    //  is 1 and the abort still fires exactly as before (ADR-056).
+    fput(fh, "                if " + q + dol + "run_label" + q + " == " + q + "1" + q + " & " + q + dol + "hfc_label_explicit" + q + " == " + q + "1" + q + " {")
     fput(fh, "                    di as error " + q + "ERROR: ds" + bt + "_i" + ap + "_capi is empty. Define in Section 0." + q)
     fput(fh, "                    _hfc_abort")
     fput(fh, "                }")
@@ -1029,7 +1046,13 @@ void write_labeling_module(
     fput(fh, "            }")
     fput(fh, "            cap confirm file " + q + dol + "capi_dir/" + dol + "{ds" + bt + "_i" + ap + "_capi}" + q)
     fput(fh, "            if _rc {")
-    fput(fh, "                if " + q + dol + "run_label" + q + " == " + q + "1" + q + " {")
+    //  The single-dataset branch gates its abort on hfc_label_explicit too:
+    //  it aborts when labeling was ASKED for, and degrades when the default
+    //  merely switched it on. The multi-dataset branches did not, so the same
+    //  project with two forms hard-stopped where one form warned. Inside a
+    //  managed project Master always sets run_labeling, so hfc_label_explicit
+    //  is 1 and the abort still fires exactly as before (ADR-056).
+    fput(fh, "                if " + q + dol + "run_label" + q + " == " + q + "1" + q + " & " + q + dol + "hfc_label_explicit" + q + " == " + q + "1" + q + " {")
     fput(fh, "                    di as error " + q + "ERROR: CAPI file not found: " + dol + "capi_dir/" + dol + "{ds" + bt + "_i" + ap + "_capi}" + q)
     fput(fh, "                    _hfc_abort")
     fput(fh, "                }")
@@ -1078,7 +1101,14 @@ void write_labeling_module(
     fput(fh, "                else {")
     fput(fh, "                    local _folder " + q + "form_" + bt + "_fnum" + ap + q)
     fput(fh, "                }")
-    fput(fh, "                local _xlsx : dir " + q + dol + "capi_dir/" + bt + "_folder" + ap + q + " files " + q + "*.xlsx" + q)
+    //  -dir- on a folder that is not there raises r(601), which killed the whole
+    //  run even with run_label = 0. Master always creates these CAPI subfolders,
+    //  so this is only reachable standalone — where the "no CAPI form" branch
+    //  below already says the right thing and already tells run_label 1 from 0.
+    //  The blank first is load-bearing: without it a failed -dir- would leave the
+    //  previous dataset's form list standing (ADR-056).
+    fput(fh, "                local _xlsx " + q + q)
+    fput(fh, "                cap local _xlsx : dir " + q + dol + "capi_dir/" + bt + "_folder" + ap + q + " files " + q + "*.xlsx" + q)
     fput(fh, "                local _c " + q + q)
     fput(fh, "                local _xlsx_clean " + q + q)
     fput(fh, "                foreach _xf of local _xlsx {")
@@ -1087,7 +1117,7 @@ void write_labeling_module(
     fput(fh, "                local _xlsx " + bt + q + bt + "_xlsx_clean" + ap + q + ap)
     fput(fh, "                gettoken _c : _xlsx")
     fput(fh, "                if " + q + bt + "_c" + ap + q + " == " + q + q + " {")
-    fput(fh, "                    if " + q + dol + "run_label" + q + " == " + q + "1" + q + " {")
+    fput(fh, "                    if " + q + dol + "run_label" + q + " == " + q + "1" + q + " & " + q + dol + "hfc_label_explicit" + q + " == " + q + "1" + q + " {")
     fput(fh, "                        di as error " + q + "ERROR: No CAPI form for DS" + bt + "_i" + ap + ". Place .xlsx in: " + dol + "capi_dir/" + bt + "_folder" + ap + "/" + q)
     fput(fh, "                        _hfc_abort")
     fput(fh, "                    }")
@@ -1260,18 +1290,402 @@ void write_labeling_part2(
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  STANDALONE MODE  (ADR-056)
+//
+//  Every generated executable DO carries a small block that lets it run from
+//  wherever it is sitting when there is no MDF project above it. The block is
+//  reached only after the .hfc_root walk has failed, so a file inside a real
+//  project can never take it.
+//
+//  Two shorthands keep the emitted quoting readable:
+//    _cq("x")  ->  `"`x'"'      compound-quoted macro reference
+//    _mq("x")  ->  `x'          plain macro reference
+// ═══════════════════════════════════════════════════════════════════════════
+
+string scalar _mq(string scalar nm)
+{
+    return(char(96) + nm + char(39))
+}
+
+string scalar _cq(string scalar nm)
+{
+    return(char(96) + char(34) + char(96) + nm + char(39) + char(34) + char(39))
+}
+
+//  Discover the datasets sitting beside this file.
+//
+//  Deterministic by construction: -dir- is asked for *.dta with respectcase,
+//  the result is passed through `: list sort', and the framework's own output
+//  is filtered out by name so a second run cannot read the first run's results
+//  as input. The DO's own folder is searched first; only if it holds no
+//  candidate are Data/, 02_Data/ and 01_Data/ tried, which is what lets a
+//  Deliverables package work without a second discovery rule.
+//
+//  Leaves behind:  `_sa_cand'     sorted candidate filenames
+//                  `_sa_k'        how many
+//                  `_sa_datadir'  the folder they were found in
+void standalone_discover(real scalar fh, string scalar q, string scalar bt,
+                         string scalar ap, string scalar dol, string scalar ind)
+{
+    pragma unset dol
+    fput(fh, ind + "*  ── Datasets sitting beside this file ──────────────────────────────")
+    fput(fh, ind + "local _sa_datadir " + _cq("_selfdir"))
+    fput(fh, ind + "local _sa_cand " + q + q)
+    fput(fh, ind + "local _sa_k 0")
+    fput(fh, ind + "foreach _sa_try in " + q + "." + q + " " + q + "Data" + q + " " + q + "02_Data" + q + " " + q + "01_Data" + q + " {")
+    fput(fh, ind + "    if " + _mq("_sa_k") + " == 0 {")
+    fput(fh, ind + "        local _sa_dir " + _cq("_selfdir"))
+    fput(fh, ind + "        if " + q + _mq("_sa_try") + q + " != " + q + "." + q + " local _sa_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_try" + ap + q + ap)
+    fput(fh, ind + "        local _sa_raw " + q + q)
+    fput(fh, ind + "        cap local _sa_raw : dir " + _cq("_sa_dir") + " files " + q + "*.dta" + q + ", respectcase")
+    fput(fh, ind + "        local _sa_srt : list sort _sa_raw")
+    fput(fh, ind + "        foreach _sa_f of local _sa_srt {")
+    fput(fh, ind + "            local _sa_ok 1")
+    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_KEYS_" + q + ")    > 0 local _sa_ok 0")
+    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_CLEANED" + q + ")  > 0 local _sa_ok 0")
+    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_MERGED_" + q + ")  > 0 local _sa_ok 0")
+    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_LABELED_" + q + ") > 0 local _sa_ok 0")
+    fput(fh, ind + "            if substr(" + _cq("_sa_f") + ", 1, 1) == " + q + "_" + q + " local _sa_ok 0")
+    fput(fh, ind + "            if " + _mq("_sa_ok") + " == 1 {")
+    fput(fh, ind + "                local _sa_cand " + bt + q + bt + "_sa_cand" + ap + " " + bt + q + bt + "_sa_f" + ap + q + ap + q + ap)
+    fput(fh, ind + "            }")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        local _sa_k : list sizeof _sa_cand")
+    fput(fh, ind + "        if " + _mq("_sa_k") + " > 0 local _sa_datadir " + _cq("_sa_dir"))
+    fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+}
+
+//  Build the standalone execution context.
+//
+//  `nds'   how many datasets this file was generated for — the count the
+//          folder must match, or the run stops rather than guess.
+//  `needs' which package commands this particular file calls, so it carries a
+//          fallback only for what it uses: "core", "finalise", or both.
+void standalone_context(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    real scalar _k
+
+    fput(fh, ind + "*  ══ STANDALONE MODE ═══════════════════════════════════════════════")
+    fput(fh, ind + "*  No project above this file, but data beside it. Everything below is")
+    fput(fh, ind + "*  rooted in this folder; nothing outside it is read or written.")
+    fput(fh, "")
+
+    //  ── Fail loudly: nothing to work on ────────────────────────────────────
+    fput(fh, ind + "if " + _mq("_sa_k") + " == 0 {")
+    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as error " + q + "  STANDALONE MODE  —  NO DATASET FOUND BESIDE THIS FILE" + q)
+    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as txt   " + q + "  This file is not inside a Master DO File project, so it looked" + q)
+    fput(fh, ind + "    di as txt   " + q + "  for Stata datasets in its own folder and found none:" + q)
+    fput(fh, ind + "    di as result " + q + "    " + q + " " + _cq("_selfdir"))
+    fput(fh, ind + "    di as txt   " + q + "  Put the .dta file(s) this file should read in that folder (or in" + q)
+    fput(fh, ind + "    di as txt   " + q + "  a Data/ subfolder) and run it again." + q)
+    fput(fh, ind + "    di as txt   " + q + "  Framework output — *_CLEANED, *_KEYS_, *_MERGED_, *_LABELED_ — is" + q)
+    fput(fh, ind + "    di as txt   " + q + "  never counted as input, so an earlier run's results cannot stand" + q)
+    fput(fh, ind + "    di as txt   " + q + "  in for data." + q)
+    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "    exit 198")
+    fput(fh, ind + "}")
+    fput(fh, "")
+
+    //  ── Fail loudly: the folder does not match what this file was built for ─
+    fput(fh, ind + "if " + _mq("_sa_k") + " != " + nds + " {")
+    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as error " + q + "  STANDALONE MODE  —  DATASET COUNT DOES NOT MATCH THIS FILE" + q)
+    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as txt   " + q + "  This file was generated for " + nds + " dataset(s); the folder holds " + _mq("_sa_k") + ":" + q)
+    fput(fh, ind + "    foreach _sa_f of local _sa_cand {")
+    fput(fh, ind + "        di as result " + q + "    " + q + " " + _cq("_sa_f"))
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    di as txt   " + q + "  Looked in: " + q + " " + _cq("_sa_datadir"))
+    fput(fh, ind + "    di as txt   " + q + "  Which dataset answers to which check cannot be decided from a" + q)
+    fput(fh, ind + "    di as txt   " + q + "  count that does not match, and guessing would check the wrong" + q)
+    fput(fh, ind + "    di as txt   " + q + "  data. Leave exactly " + nds + " dataset(s) in the folder, or take" + q)
+    fput(fh, ind + "    di as txt   " + q + "  this file from a project built for " + _mq("_sa_k") + " dataset(s)." + q)
+    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "    exit 198")
+    fput(fh, ind + "}")
+    fput(fh, "")
+
+    //  ── Identity: the same DS1..DSn concepts a managed project uses ────────
+    fput(fh, ind + "global mdf_standalone 1")
+    fput(fh, ind + "global ROOT " + _cq("_selfdir"))
+    fput(fh, ind + "global project_name " + q + pname + q)
+    fput(fh, ind + "global actual_n_dta " + _mq("_sa_k"))
+    fput(fh, ind + "global n_datasets   " + _mq("_sa_k"))
+    fput(fh, ind + "forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
+    fput(fh, ind + "    local _sa_f : word " + _mq("_sa_i") + " of " + _mq("_sa_cand"))
+    fput(fh, ind + "    global auto_dsname_" + _mq("_sa_i") + " = substr(" + _cq("_sa_f") + ", 1, strlen(" + _cq("_sa_f") + ") - 4)")
+    fput(fh, ind + "    global target_dta_"  + _mq("_sa_i") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "    global dta_labeled_" + _mq("_sa_i") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "}")
+    fput(fh, ind + "global target_dta  " + q + dol + "{target_dta_1}"  + q)
+    fput(fh, ind + "global dta_labeled " + q + dol + "{dta_labeled_1}" + q)
+    fput(fh, "")
+
+    //  ── Dates ──────────────────────────────────────────────────────────────
+    fput(fh, ind + "local _sa_dt = daily(" + q + bt + "c(current_date)" + ap + q + ", " + q + "DMY" + q + ")")
+    fput(fh, ind + "local _sa_ds : display %tdCCYYNNDD " + _mq("_sa_dt"))
+    fput(fh, ind + "global today = strtrim(" + q + _mq("_sa_ds") + q + ")")
+    fput(fh, ind + "local _sa_dy = " + _mq("_sa_dt") + " - 1")
+    fput(fh, ind + "local _sa_dys : display %tdCCYYNNDD " + _mq("_sa_dy"))
+    fput(fh, ind + "global yesterday = strtrim(" + q + _mq("_sa_dys") + q + ")")
+    fput(fh, ind + "global hfc_folder_date " + q + dol + "today" + q)
+    fput(fh, ind + "global LAST_RUN_DATE   " + q + dol + "today" + q)
+    fput(fh, "")
+
+    //  ── Output: one folder, always beside this file ───────────────────────
+    fput(fh, ind + "global mdf_out " + bt + q + bt + "_selfdir" + ap + "/MDF_Output" + q + ap)
+    fput(fh, ind + "cap mkdir " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "global hfc_run_dir          " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "global clean_dir            " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "global hfc_dir              " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "global hfc_keys_dir         " + q + dol + "mdf_out/KEYS" + q)
+    fput(fh, ind + "global hfc_keys_hfc_dir     " + q + dol + "hfc_keys_dir/01_HFC_Keys" + q)
+    fput(fh, ind + "global hfc_keys_audio_dir   " + q + dol + "hfc_keys_dir/02_Audio_Keys" + q)
+    fput(fh, ind + "global hfc_keys_trans_dir   " + q + dol + "hfc_keys_dir/03_Translation_Keys" + q)
+    fput(fh, ind + "global hfc_keys_master_dir  " + q + dol + "hfc_keys_hfc_dir" + q)
+    fput(fh, ind + "global hfc_flag_dir         " + q + dol + "hfc_keys_dir/.flag_history" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "hfc_keys_dir" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "hfc_keys_hfc_dir" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "hfc_keys_audio_dir" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "hfc_keys_trans_dir" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "hfc_flag_dir" + q)
+    fput(fh, ind + "global hfc_report " + q + dol + "mdf_out/HFC_" + dol + "{project_name}_" + dol + "today.xlsx" + q)
+    fput(fh, "")
+
+    //  ── Input folders ──────────────────────────────────────────────────────
+    fput(fh, ind + "global data_dir             " + _cq("_sa_datadir"))
+    fput(fh, ind + "global raw_data_dir         " + _cq("_sa_datadir"))
+    fput(fh, ind + "global hfc_rawdata_dir      " + _cq("_sa_datadir"))
+    fput(fh, ind + "global hfc_raw_snapshot_dir " + _cq("_sa_datadir"))
+    fput(fh, ind + "global dofiles_dir          " + _cq("_selfdir"))
+    fput(fh, ind + "global processing_dir       " + _cq("_selfdir"))
+    fput(fh, ind + "global processing_data_dir  " + _cq("_sa_datadir"))
+    fput(fh, ind + "*  The framework's own already-bootstrapped flag. Every module tests it,")
+    fput(fh, ind + "*  and so does the secondary guard, which would otherwise reload another")
+    fput(fh, ind + "*  project's 00_Directory.do over the context just built here.")
+    fput(fh, ind + "global hfc_dofiles_dir      " + _cq("_selfdir"))
+    fput(fh, "")
+
+    //  ── CAPI material, if any travelled with the file ─────────────────────
+    fput(fh, ind + "global surv_inst_dir " + _cq("_selfdir"))
+    fput(fh, ind + "global capi_dir " + _cq("_selfdir"))
+    fput(fh, ind + "foreach _sa_c in " + q + "02_CAPI" + q + " " + q + "CAPI" + q + " " + q + "01_Survey_Instruments/02_CAPI" + q + " {")
+    fput(fh, ind + "    local _sa_ok 0")
+    fput(fh, ind + "    mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(" + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ")))")
+    fput(fh, ind + "    if " + _mq("_sa_ok") + " == 1 {")
+    fput(fh, ind + "        global capi_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ap)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+    fput(fh, "")
+
+    //  ── Translation material, if any travelled with the file ──────────────
+    fput(fh, ind + "global translation_dir " + q + dol + "mdf_out/Translation" + q)
+    fput(fh, ind + "foreach _sa_c in " + q + "05_Translation" + q + " " + q + "Translation" + q + " {")
+    fput(fh, ind + "    local _sa_ok 0")
+    fput(fh, ind + "    mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(" + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ")))")
+    fput(fh, ind + "    if " + _mq("_sa_ok") + " == 1 {")
+    fput(fh, ind + "        global translation_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ap)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+    fput(fh, ind + "global trans_exported_dir   " + q + dol + "translation_dir/01_Exported" + q)
+    fput(fh, ind + "global trans_translated_dir " + q + dol + "translation_dir/02_Translated" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "translation_dir" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "trans_exported_dir" + q)
+    fput(fh, ind + "cap mkdir " + q + dol + "trans_translated_dir" + q)
+    fput(fh, "")
+
+    //  ── Survey configuration, as this file was generated with it ──────────
+    fput(fh, ind + "global sample_size  " + st_global("sample_size"))
+    fput(fh, ind + "global meta_front   " + q + st_global("meta_front")  + q)
+    fput(fh, ind + "global meta_ids     " + q + st_global("meta_ids")    + q)
+    fput(fh, ind + "global tail         " + q + st_global("tail")        + q)
+    fput(fh, ind + "global timer_start  " + q + st_global("timer_start") + q)
+    fput(fh, ind + "global timer_end    " + q + st_global("timer_end")   + q)
+    for (_k = 1; _k <= 3; _k++) {
+    fput(fh, ind + "global meta_front_" + strofreal(_k) + " " + q + st_global("meta_front_" + strofreal(_k)) + q)
+    fput(fh, ind + "global meta_ids_"   + strofreal(_k) + " " + q + st_global("meta_ids_"   + strofreal(_k)) + q)
+    fput(fh, ind + "global tail_"       + strofreal(_k) + " " + q + st_global("tail_"       + strofreal(_k)) + q)
+    }
+    fput(fh, ind + "global hfc_openended_vars   " + q + st_global("hfc_openended_vars")   + q)
+    fput(fh, ind + "global hfc_openended_vars_1 " + q + st_global("hfc_openended_vars_1") + q)
+    fput(fh, ind + "global hfc_openended_vars_2 " + q + st_global("hfc_openended_vars_2") + q)
+    fput(fh, ind + "global hfc_openended_vars_3 " + q + st_global("hfc_openended_vars_3") + q)
+    fput(fh, ind + "global oe_export_all   " + q + st_global("oe_export_all")   + q)
+    fput(fh, "")
+    fput(fh, ind + "*  Stage switches, unlike the survey constants above, are settings a")
+    fput(fh, ind + "*  caller may legitimately want to change: a wrapper DO can set one")
+    fput(fh, ind + "*  before running this file. Only fill in what the session has not.")
+    fput(fh, ind + "if " + q + dol + "run_labeling" + q + "    == " + q + q + " global run_labeling    " + q + st_global("run_labeling")    + q)
+    fput(fh, ind + "if " + q + dol + "exportopenended" + q + " == " + q + q + " global exportopenended " + q + st_global("exportopenended") + q)
+    fput(fh, ind + "if " + q + dol + "inputcorrection" + q + " == " + q + q + " global inputcorrection " + q + st_global("inputcorrection") + q)
+    fput(fh, ind + "global capi_language " + q + st_global("capi_language") + q)
+    fput(fh, ind + "global capi_override " + q + st_global("capi_override") + q)
+    fput(fh, ind + "global capi_verbose  " + q + st_global("capi_verbose")  + q)
+    fput(fh, ind + "global code_dk    " + q + st_global("code_dk")    + q)
+    fput(fh, ind + "global code_na    " + q + st_global("code_na")    + q)
+    fput(fh, ind + "global code_other " + q + st_global("code_other") + q)
+    fput(fh, ind + "global verbose    " + q + st_global("verbose")    + q)
+    fput(fh, ind + "global audio_seed         " + q + st_global("audio_seed")         + q)
+    fput(fh, ind + "global audio_sample_count " + q + st_global("audio_sample_count") + q)
+    fput(fh, ind + "global audio_drop_before  " + q + st_global("audio_drop_before")  + q)
+    fput(fh, ind + "global audio_keep_enums   " + q + st_global("audio_keep_enums")   + q)
+    fput(fh, ind + "global merge_required  " + q + st_global("merge_required") + q)
+    fput(fh, ind + "global merge_datasets  " + q + st_global("merge_datasets") + q)
+    fput(fh, ind + "global merge_type      " + q + st_global("merge_type")     + q)
+    fput(fh, ind + "global merge_key       " + q + st_global("merge_key")      + q)
+    fput(fh, "")
+    fput(fh, ind + "*  Stages that only mean anything inside a managed project.")
+    fput(fh, ind + "global post_field           0")
+    fput(fh, ind + "global run_import           0")
+    fput(fh, ind + "global import_fingerprint   0")
+    fput(fh, ind + "global hfc_postfield_active 0")
+    fput(fh, "")
+    fput(fh, ind + "forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
+    fput(fh, ind + "    global pre_keys_" + _mq("_sa_i") + " " + bt + q + dol + "hfc_keys_master_dir/" + dol + "{auto_dsname_" + bt + "_sa_i" + ap + "}_KEYS_" + dol + "LAST_RUN_DATE.dta" + q + ap)
+    fput(fh, ind + "}")
+    fput(fh, "")
+
+    //  ── Helper programs, in case the package is not installed ─────────────
+    fput(fh, ind + "*  ── Helpers, for a machine with no framework installed ─────────────")
+    write_module_helpers(fh, q, bt, ap, dol)
+    fput(fh, "")
+
+    if (strpos(needs, "core") > 0) {
+        fput(fh, "cap which mdf_core_vars")
+        fput(fh, "if _rc {")
+        fput(fh, "    cap program drop mdf_core_vars")
+        fput(fh, "    program define mdf_core_vars")
+        fput(fh, "        cap confirm variable fielddate")
+        fput(fh, "        if _rc {")
+        fput(fh, "            cap confirm variable starttime")
+        fput(fh, "            if !_rc {")
+        fput(fh, "                cap gen double fielddate = dofc(starttime)")
+        fput(fh, "                cap format fielddate %td")
+        fput(fh, "            }")
+        fput(fh, "        }")
+        fput(fh, "        cap confirm variable total_duration")
+        fput(fh, "        if _rc {")
+        fput(fh, "            cap confirm variable duration")
+        fput(fh, "            if !_rc {")
+        fput(fh, "                cap destring duration, replace force")
+        fput(fh, "                cap gen total_duration = duration / 60")
+        fput(fh, "            }")
+        fput(fh, "        }")
+        fput(fh, "    end")
+        fput(fh, "}")
+        fput(fh, "")
+    }
+
+    if (strpos(needs, "finalise") > 0) {
+        fput(fh, "cap which mdf_finalise")
+        fput(fh, "if _rc {")
+        fput(fh, "    cap program drop mdf_finalise")
+        fput(fh, "    program define mdf_finalise")
+        fput(fh, "        args _mode")
+        fput(fh, "        if " + q + bt + "_mode" + ap + q + " == " + q + q + " local _mode " + q + "all" + q)
+        fput(fh, "        if " + q + bt + "_mode" + ap + q + " == " + q + "merge" + q + " | " + q + bt + "_mode" + ap + q + " == " + q + "all" + q + " {")
+        fput(fh, "            if " + q + dol + "merge_required" + q + " == " + q + "1" + q + " {")
+        fput(fh, "                local _ds1 : word 1 of " + dol + "merge_datasets")
+        fput(fh, "                local _ds2 : word 2 of " + dol + "merge_datasets")
+        fput(fh, "                local _cln1 " + q + dol + "{dta_cleaned_" + bt + "_ds1" + ap + "}" + q)
+        fput(fh, "                local _cln2 " + q + dol + "{dta_cleaned_" + bt + "_ds2" + ap + "}" + q)
+        fput(fh, "                if " + q + bt + "_cln1" + ap + q + " != " + q + q + " & " + q + bt + "_cln2" + ap + q + " != " + q + q + " {")
+        fput(fh, "                    use " + q + bt + "_cln2" + ap + q + ", clear")
+        fput(fh, "                    rename * u_*")
+        fput(fh, "                    rename u_" + dol + "merge_key " + dol + "merge_key")
+        fput(fh, "                    cap tostring " + dol + "merge_key, replace force format(%20.0g)")
+        fput(fh, "                    tempfile _using_tmp")
+        fput(fh, "                    save " + q + bt + "_using_tmp" + ap + q + ", replace")
+        fput(fh, "                    use " + q + bt + "_cln1" + ap + q + ", clear")
+        fput(fh, "                    rename * m_*")
+        fput(fh, "                    rename m_" + dol + "merge_key " + dol + "merge_key")
+        fput(fh, "                    cap rename m_key key")
+        fput(fh, "                    cap tostring " + dol + "merge_key, replace force format(%20.0g)")
+        fput(fh, "                    merge " + dol + "merge_type " + dol + "merge_key using " + q + bt + "_using_tmp" + ap + q + ", gen(_merge_post) force")
+        fput(fh, "                    local _sfx = subinstr(" + q + dol + "merge_datasets" + q + ", " + q + " " + q + ", " + q + "_" + q + ", .)")
+        fput(fh, "                    save " + q + dol + "hfc_run_dir/" + dol + "{project_name}_" + bt + "_sfx" + ap + "_MERGED_" + dol + "hfc_folder_date.dta" + q + ", replace")
+        fput(fh, "                    di as result " + q + "  Merged dataset saved." + q)
+        fput(fh, "                }")
+        fput(fh, "            }")
+        fput(fh, "        }")
+        fput(fh, "        if " + q + bt + "_mode" + ap + q + " == " + q + "publish" + q + " | " + q + bt + "_mode" + ap + q + " == " + q + "all" + q + " {")
+        fput(fh, "            forvalues _ds = 1/" + dol + "actual_n_dta {")
+        fput(fh, "                local _src " + q + dol + "{dta_cleaned_" + bt + "_ds" + ap + "}" + q)
+        fput(fh, "                cap confirm file " + q + bt + "_src" + ap + q)
+        fput(fh, "                if _rc {")
+        fput(fh, "                    di as txt " + q + "  DS" + bt + "_ds" + ap + ": no cleaned dataset produced — nothing to publish." + q)
+        fput(fh, "                    continue")
+        fput(fh, "                }")
+        fput(fh, "                local _nm " + q + dol + "{auto_dsname_" + bt + "_ds" + ap + "}" + q)
+        fput(fh, "                if " + q + bt + "_nm" + ap + q + " == " + q + q + " local _nm " + q + "DS" + bt + "_ds" + ap + q)
+        fput(fh, "                cap copy " + q + bt + "_src" + ap + q + " " + q + dol + "clean_dir/" + bt + "_nm" + ap + "_CLEANED.dta" + q + ", replace")
+        fput(fh, "                if !_rc di as result " + q + "  Published → " + bt + "_nm" + ap + "_CLEANED.dta" + q)
+        fput(fh, "            }")
+        fput(fh, "        }")
+        fput(fh, "    end")
+        fput(fh, "}")
+        fput(fh, "")
+    }
+
+    //  ── Announce, loudly and specifically ─────────────────────────────────
+    fput(fh, ind + "di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "di as result " + q + "  STANDALONE MODE  —  running from this file's own folder" + q)
+    fput(fh, ind + "di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "di as txt    " + q + "  No Master DO File project was found above this file, so it is" + q)
+    fput(fh, ind + "di as txt    " + q + "  running on what sits beside it. CONFIRM this is the data you" + q)
+    fput(fh, ind + "di as txt    " + q + "  meant:" + q)
+    fput(fh, ind + "di as txt    " + q + "    root   : " + q + " " + _cq("_selfdir"))
+    fput(fh, ind + "di as txt    " + q + "    data   : " + q + " " + _cq("_sa_datadir"))
+    fput(fh, ind + "forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
+    fput(fh, ind + "    di as result " + q + "    DS" + bt + "_sa_i" + ap + "    : " + q + " " + q + dol + "{target_dta_" + bt + "_sa_i" + ap + "}" + q)
+    fput(fh, ind + "}")
+    fput(fh, ind + "di as txt    " + q + "    output : " + q + " " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "if " + _mq("_sel_run") + " == 1 {")
+    fput(fh, ind + "    di as error " + q + "  Ctrl+A / Ctrl+D gives Stata no path for this file, so the folder" + q)
+    fput(fh, ind + "    di as error " + q + "  above is Stata's WORKING DIRECTORY, not necessarily this file's." + q)
+    fput(fh, ind + "    di as error " + q + "  If it is wrong: File > Change working directory, or launch Stata" + q)
+    fput(fh, ind + "    di as error " + q + "  by double-clicking this file." + q)
+    fput(fh, ind + "}")
+    fput(fh, ind + "di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "local _boot " + _cq("_selfdir"))
+}
+
+//  `nds'   datasets this file was generated for; standalone mode refuses to
+//          run against a folder holding a different number (ADR-056).
+//  `needs' package commands this file calls, so its standalone fallback
+//          carries only what it uses: "core", "finalise", or both.
 void module_header(
-    real scalar fh, string scalar q, string scalar bt, string scalar ap, string scalar dol, string scalar pname)
+    real scalar fh, string scalar q, string scalar bt, string scalar ap, string scalar dol, string scalar pname,
+    string scalar nds, string scalar needs)
 {
     string scalar bs
     bs = char(92)
 
     fput(fh, "*  ── Bootstrap: locate the project, then load its paths and helpers ─────────")
     fput(fh, "local _boot " + q + dol + "hfc_dofiles_dir" + q)
+    fput(fh, "*  A standalone context belongs to the folder that established it. Stata's")
+    fput(fh, "*  globals outlive `clear all', so a second stranded file run in the same")
+    fput(fh, "*  session must resolve itself afresh rather than inherit the first one's.")
+    fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " local _boot " + q + q)
+    fput(fh, "global mdf_standalone 0")
     fput(fh, "if " + bt + q + bt + "_boot" + ap + q + ap + " == " + q + q + " {")
     fput(fh, "")
     fput(fh, "    local _p " + bt + q + bt + "c(do_current)" + ap + q + ap)
-    fput(fh, "    if " + bt + q + bt + "_p" + ap + q + ap + " == " + q + q + " local _p " + bt + q + bt + "c(filename)" + ap + q + ap)
+    fput(fh, "    *  c(filename) is the last file -use-d or -save-d, which is a DATASET as")
+    fput(fh, "    *  soon as anything has loaded one — and a sibling module called after")
+    fput(fh, "    *  that would anchor itself in the data folder instead of its own. Take")
+    fput(fh, "    *  this rung only when it really is a do-file (ADR-056).")
+    fput(fh, "    if " + bt + q + bt + "_p" + ap + q + ap + " == " + q + q + " {")
+    fput(fh, "        local _cf " + bt + q + bt + "c(filename)" + ap + q + ap)
+    fput(fh, "        if lower(substr(" + bt + q + bt + "_cf" + ap + q + ap + ", -3, 3)) == " + q + ".do" + q + " local _p " + bt + q + bt + "_cf" + ap + q + ap)
+    fput(fh, "    }")
     fput(fh, "    if " + bt + q + bt + "_p" + ap + q + ap + " == " + q + q + " local _p " + bt + q + bt + "c(pwd)" + ap + "/." + q + ap)
     fput(fh, "    local _p = subinstr(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + bs + q + ", " + q + "/" + q + ", .)")
     fput(fh, "")
@@ -1286,6 +1700,11 @@ void module_header(
     fput(fh, "        local _p " + bt + q + bt + "c(pwd)" + ap + "/." + q + ap)
     fput(fh, "    }")
     fput(fh, "")
+    fput(fh, "    *  The folder this file is sitting in. It is the standalone root if no")
+    fput(fh, "    *  project turns up above it. Captured before the walk below consumes")
+    fput(fh, "    *  `_p'.")
+    fput(fh, "    local _selfdir = substr(" + bt + q + bt + "_p" + ap + q + ap + ", 1, strrpos(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + "/" + q + ") - 1)")
+    fput(fh, "")
     fput(fh, "    local _root " + q + q)
     fput(fh, "    forvalues _i = 1/12 {")
     fput(fh, "        local _p = substr(" + bt + q + bt + "_p" + ap + q + ap + ", 1, strrpos(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + "/" + q + ") - 1)")
@@ -1297,7 +1716,25 @@ void module_header(
     fput(fh, "        }")
     fput(fh, "    }")
     fput(fh, "")
+    fput(fh, "    *  ── No project above this file ──────────────────────────────────────")
+    fput(fh, "    *  Before falling back to the cache an earlier Master run left behind —")
+    fput(fh, "    *  which would bind this file to a project it is no longer part of, and")
+    fput(fh, "    *  write results there — see whether it can stand on its own where it")
+    fput(fh, "    *  sits. Discovery runs only on this branch, so a file inside a real")
+    fput(fh, "    *  project never reaches it.")
     fput(fh, "    if " + bt + q + bt + "_root" + ap + q + ap + " == " + q + q + " {")
+    standalone_discover(fh, q, bt, ap, dol, "        ");
+    fput(fh, "        *  Stata told us where this file is and there is no project above")
+    fput(fh, "        *  it: standalone is then the only honest reading, data or no data —")
+    fput(fh, "        *  an empty folder has to say so, not silently adopt a cached project.")
+    fput(fh, "        if " + bt + "_sel_run" + ap + " == 0 global mdf_standalone 1")
+    fput(fh, "        *  A selection run has no path of its own, so the working directory is")
+    fput(fh, "        *  only evidence when it actually holds data; otherwise the cache below")
+    fput(fh, "        *  remains the better guess, and it announces itself.")
+    fput(fh, "        if " + bt + "_sel_run" + ap + " == 1 & " + bt + "_sa_k" + ap + " > 0 global mdf_standalone 1")
+    fput(fh, "    }")
+    fput(fh, "")
+    fput(fh, "    if " + bt + q + bt + "_root" + ap + q + ap + " == " + q + q + " & " + q + dol + "mdf_standalone" + q + " != " + q + "1" + q + " {")
     fput(fh, "        tempname _fhb")
     fput(fh, "        cap file open " + bt + "_fhb" + ap + " using " + bt + q + bt + "c(tmpdir)" + ap + "hfc_root_cache_" + pname + ".txt" + q + ap + ", read text")
     fput(fh, "        if !_rc {")
@@ -1306,10 +1743,17 @@ void module_header(
     fput(fh, "        }")
     fput(fh, "    }")
     fput(fh, "")
+    fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " {")
+    standalone_context(fh, q, bt, ap, dol, pname, nds, needs, "    ");
+    fput(fh, "}")
+    fput(fh, "else {")
+    fput(fh, "")
     fput(fh, "    if " + bt + q + bt + "_root" + ap + q + ap + " == " + q + q + " {")
     fput(fh, "        di as error " + q + "ERROR: could not locate the project root from this file." + q)
     fput(fh, "        di as txt   " + q + "  Run the Master DO file once from the project root, then try again," + q)
     fput(fh, "        di as txt   " + q + "  or open this file from inside the project folder." + q)
+    fput(fh, "        di as txt   " + q + "  To run it on its own instead, put the .dta file(s) it should read" + q)
+    fput(fh, "        di as txt   " + q + "  in its own folder — see STANDALONE MODE in the project README." + q)
     fput(fh, "        exit 198")
     fput(fh, "    }")
     fput(fh, "")
@@ -1326,15 +1770,19 @@ void module_header(
     fput(fh, "    }")
     fput(fh, "    di as result " + q + "Project root → " + q + " " + bt + q + bt + "_root" + ap + q + ap)
     fput(fh, "    local _boot " + bt + q + bt + "_root" + ap + "/04_DO Files" + q + ap)
-    fput(fh, "}")
     fput(fh, "")
-    fput(fh, "cap which mdf_bootstrap")
-    fput(fh, "if _rc {")
-    fput(fh, "    di as error " + q + "The Master DO File framework is not installed on this machine." + q)
-    fput(fh, "    di as error " + bt + q + "Run:  net install mdf, from(" + q + "https://raw.githubusercontent.com/adinkhan7/master-do-file/main" + q + ") replace" + q + ap)
-    fput(fh, "    exit 601")
+    fput(fh, "    *  A managed project's globals live in its 00_Directory.do, which the")
+    fput(fh, "    *  package knows how to load. Standalone mode never gets here: it built")
+    fput(fh, "    *  its own context above and must not need the package installed.")
+    fput(fh, "    cap which mdf_bootstrap")
+    fput(fh, "    if _rc {")
+    fput(fh, "        di as error " + q + "The Master DO File framework is not installed on this machine." + q)
+    fput(fh, "        di as error " + bt + q + "Run:  net install mdf, from(" + q + "https://raw.githubusercontent.com/adinkhan7/master-do-file/main" + q + ") replace" + q + ap)
+    fput(fh, "        exit 601")
+    fput(fh, "    }")
+    fput(fh, "    mdf_bootstrap " + bt + q + bt + "_root" + ap + q + ap)
     fput(fh, "}")
-    fput(fh, "mdf_bootstrap " + bt + q + bt + "_root" + ap + q + ap)
+    fput(fh, "}")
     fput(fh, "")
 }
 
@@ -2150,6 +2598,32 @@ void write_mod_duplicates_check(real scalar fh, string scalar q, string scalar b
     fput(fh, "")
 }
 
+//  Call a sibling generated module, if it is there.
+//
+//  Inside a project it always is, so the guard never fires and behaviour is
+//  unchanged. A Processing DO carried off on its own may arrive without its
+//  siblings; the fallback says so and carries on rather than erroring out on a
+//  missing file (ADR-056).
+void write_sibling_call(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar modfile, string scalar modargs,
+                        string scalar missing_msg, string scalar load_ds)
+{
+    fput(fh, "cap confirm file " + q + dol + "dofiles_dir/" + modfile + q)
+    fput(fh, "if !_rc {")
+    fput(fh, "    do " + q + dol + "dofiles_dir/" + modfile + q + " " + modargs)
+    fput(fh, "}")
+    fput(fh, "else {")
+    fput(fh, "    di as txt " + q + missing_msg + q)
+    //  Labeling is the one sibling whose job something else has to do: without
+    //  it nothing is in memory and the cleaning below has nothing to clean.
+    if (load_ds != "") {
+        fput(fh, "    cap use " + q + dol + "{target_dta_" + load_ds + "}" + q + ", clear")
+        fput(fh, "    if !_rc global hfc_label_ok 1")
+    }
+    fput(fh, "}")
+}
+
 void write_processing_do(string scalar procdir, string scalar procfile,
                          string scalar tver,
                          string scalar pname, string scalar q, string scalar bt,
@@ -2171,7 +2645,7 @@ if (p != "") {
     fput(fh, "set more off")
     fput(fh, "version 16")
     fput(fh, "")
-    module_header(fh, q, bt, ap, dol, pname)
+    module_header(fh, q, bt, ap, dol, pname, nds, "core finalise")
     fput(fh, "di as result " + q + "--- Processing ---" + q)
     fput(fh, "")
     fput(fh, "")
@@ -2193,18 +2667,30 @@ if (p != "") {
         fput(fh, "")
 write_selection_guard(fh, q, bt, ap, dol, pname)
         fput(fh, "*  ── Define File Paths ──────────────────────────────────────────────────────")
-        fput(fh, "local _raw_file " + q + dol + "hfc_raw_snapshot_dir/" + dsname + "_" + dol + "hfc_folder_date.dta" + q)
-        fput(fh, "local _cln_file " + q + dol + "hfc_run_dir/" + dsname + "_CLEANED_" + dol + "hfc_folder_date.dta" + q)
+        //  The dataset name is baked in at generation time. Standalone mode
+        //  discovers its own dataset, whose file name need not match, and the
+        //  labeling module and mdf_finalise both key off the discovered name —
+        //  so the two have to agree or the cleaned file is saved under one name
+        //  and published under another (ADR-056). Inside a project the two are
+        //  the same string, so the emitted default is what runs, unchanged.
+        fput(fh, "local _ds_name " + q + dsname + q)
+        fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " local _ds_name " + q + dol + "{auto_dsname_1}" + q)
+        fput(fh, "local _raw_file " + q + dol + "hfc_raw_snapshot_dir/" + bt + "_ds_name" + ap + "_" + dol + "hfc_folder_date.dta" + q)
+        fput(fh, "local _cln_file " + q + dol + "hfc_run_dir/" + bt + "_ds_name" + ap + "_CLEANED_" + dol + "hfc_folder_date.dta" + q)
         fput(fh, "global dta_cleaned_1 " + q + bt + "_cln_file" + ap + q)
         fput(fh, "")
         fput(fh, "*  ── Label this dataset, then clean it ──────────────────────────────────────")
-        fput(fh, "do " + q + dol + "dofiles_dir/01_Labeling.do" + q + " 1")
+        write_sibling_call(fh, q, bt, ap, dol, "01_Labeling.do", "1",
+            "  DS1: 01_Labeling.do did not travel with this file — using the dataset as it stands.", "1")
         fput(fh, "")
         fput(fh, "*  ── Clean only if labeling handed over a dataset ───────────────────────────")
         fput(fh, "if " + q + dol + "hfc_label_ok" + q + " == " + q + "1" + q + " {")
         fput(fh, "")
         fput(fh, "*  ── Apply returned translations, BEFORE cleaning ───────────────────────────")
-        fput(fh, "if " + q + dol + "inputcorrection" + q + " == " + q + "1" + q + " do " + q + dol + "dofiles_dir/02_Translation.do" + q + " apply 1")
+        fput(fh, "if " + q + dol + "inputcorrection" + q + " == " + q + "1" + q + " {")
+        write_sibling_call(fh, q, bt, ap, dol, "02_Translation.do", "apply 1",
+            "  DS1: 02_Translation.do did not travel with this file — no translations applied.", "")
+        fput(fh, "}")
         fput(fh, "")
         fput(fh, "")
         fput(fh, "mdf_core_vars")
@@ -2230,18 +2716,30 @@ else {
         write_selection_guard(fh, q, bt, ap, dol, pname)
         fput(fh, "")
         fput(fh, "*  ── Define File Paths ──────────────────────────────────────────────────────")
-        fput(fh, "local _raw_file " + q + dol + "hfc_raw_snapshot_dir/" + dsname + "_" + dol + "hfc_folder_date.dta" + q)
-        fput(fh, "local _cln_file " + q + dol + "hfc_run_dir/" + dsname + "_CLEANED_" + dol + "hfc_folder_date.dta" + q)
+        //  The dataset name is baked in at generation time. Standalone mode
+        //  discovers its own dataset, whose file name need not match, and the
+        //  labeling module and mdf_finalise both key off the discovered name —
+        //  so the two have to agree or the cleaned file is saved under one name
+        //  and published under another (ADR-056). Inside a project the two are
+        //  the same string, so the emitted default is what runs, unchanged.
+        fput(fh, "local _ds_name " + q + dsname + q)
+        fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " local _ds_name " + q + dol + "{auto_dsname_" + strofreal(_k) + "}" + q)
+        fput(fh, "local _raw_file " + q + dol + "hfc_raw_snapshot_dir/" + bt + "_ds_name" + ap + "_" + dol + "hfc_folder_date.dta" + q)
+        fput(fh, "local _cln_file " + q + dol + "hfc_run_dir/" + bt + "_ds_name" + ap + "_CLEANED_" + dol + "hfc_folder_date.dta" + q)
         fput(fh, "global dta_cleaned_" + strofreal(_k) + " " + q + bt + "_cln_file" + ap + q)
         fput(fh, "")
         fput(fh, "*  ── Label this dataset, then clean it ──────────────────────────────────────")
-        fput(fh, "do " + q + dol + "dofiles_dir/01_Labeling.do" + q + " " + strofreal(_k))
+        write_sibling_call(fh, q, bt, ap, dol, "01_Labeling.do", strofreal(_k),
+            "  DS" + strofreal(_k) + ": 01_Labeling.do did not travel with this file — using the dataset as it stands.", strofreal(_k))
         fput(fh, "")
         fput(fh, "*  ── Clean only if labeling handed over a dataset ───────────────────────────")
         fput(fh, "if " + q + dol + "hfc_label_ok" + q + " == " + q + "1" + q + " {")
         fput(fh, "")
         fput(fh, "*  ── Apply returned translations, BEFORE cleaning ───────────────────────────")
-        fput(fh, "if " + q + dol + "inputcorrection" + q + " == " + q + "1" + q + " do " + q + dol + "dofiles_dir/02_Translation.do" + q + " apply " + strofreal(_k))
+        fput(fh, "if " + q + dol + "inputcorrection" + q + " == " + q + "1" + q + " {")
+        write_sibling_call(fh, q, bt, ap, dol, "02_Translation.do", "apply " + strofreal(_k),
+            "  DS" + strofreal(_k) + ": 02_Translation.do did not travel with this file — no translations applied.", "")
+        fput(fh, "}")
         fput(fh, "")
         fput(fh, "")
         fput(fh, "mdf_core_vars")
@@ -2262,7 +2760,10 @@ else {
     fput(fh, "di as result " + q + "Cleaning complete." + q)
     fput(fh, "")
     fput(fh, "*  ── Export untranslated open-ended responses ───────────────────────────────")
-    fput(fh, "if " + q + dol + "exportopenended" + q + " == " + q + "1" + q + " do " + q + dol + "dofiles_dir/02_Translation.do" + q + " export")
+    fput(fh, "if " + q + dol + "exportopenended" + q + " == " + q + "1" + q + " {")
+    write_sibling_call(fh, q, bt, ap, dol, "02_Translation.do", "export",
+        "Open-ended export skipped — 02_Translation.do did not travel with this file.", "")
+    fput(fh, "}")
     fput(fh, "else di as txt " + q + "Open-ended export skipped (exportopenended = 0)." + q)
     fput(fh, "")
     fput(fh, "*  ── Publish the cleaned dataset ────────────────────────────────────────────")
@@ -2314,7 +2815,7 @@ void mdf_modules_main()
         fput(fh, "set more off")
         fput(fh, "version 16")
         fput(fh, "")
-        module_header(fh, q, bt, ap, dol, pname)
+        module_header(fh, q, bt, ap, dol, pname, nds, "core")
         fput(fh, "*  ── System dates ───────────────────────────────────────────────────────────")
         fput(fh, "local sys_today = daily(" + q + bt + "c(current_date)" + ap + q + ", " + q + "DMY" + q + ")")
         fput(fh, "local sys_today_str   : display %tdCCYYNNDD " + bt + "sys_today" + ap)
@@ -2464,7 +2965,7 @@ void mdf_modules_main()
         fput(fh, "set more off")
         fput(fh, "version 16")
         fput(fh, "")
-        module_header(fh, q, bt, ap, dol, pname)
+        module_header(fh, q, bt, ap, dol, pname, nds, "")
         write_labeling_module(fh, q, bt, ap, dol, pname)
         fclose(fh)
     }
@@ -2481,7 +2982,7 @@ void mdf_modules_main()
         fput(fh, "set more off")
         fput(fh, "version 16")
         fput(fh, "")
-        module_header(fh, q, bt, ap, dol, pname)
+        module_header(fh, q, bt, ap, dol, pname, nds, "")
         fput(fh, "*  ── MODE ───────────────────────────────────────────────────────────────────")
         fput(fh, "if " + bt + q + bt + "1" + ap + q + ap + " != " + q + q + " global hfc_trans_mode " + bt + q + bt + "1" + ap + q + ap)
         fput(fh, "if " + bt + q + bt + "2" + ap + q + ap + " != " + q + q + " global hfc_trans_ds " + bt + "2" + ap)
@@ -2568,7 +3069,7 @@ void mdf_modules_main()
         fput(fh, "clear all")
         fput(fh, "set more off")
         fput(fh, "version 16")
-        module_header(fh, q, bt, ap, dol, pname)
+        module_header(fh, q, bt, ap, dol, pname, nds, "")
         fput(fh, "di as result " + q + "--- Audio Audit ---" + q)
         fput(fh, "global date " + q + dol + "today" + q)
         if (nds == "1") {

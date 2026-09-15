@@ -1,5 +1,5 @@
 *! mdf_workdirs.ado — Master DO File pipeline stage 7 of 18
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  today's raw-data folder and HFC run folder
 

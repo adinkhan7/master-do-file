@@ -1,5 +1,5 @@
 *! mdf_instruments.ado — Master DO File pipeline stage 14 of 18
-*! version 10.1.1   github.com/adinkhan7/master-do-file
+*! version 10.2.0   github.com/adinkhan7/master-do-file
 *!
 *!  CAPI subfolders, instrument archiving, translation folders
 
