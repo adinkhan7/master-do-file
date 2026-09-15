@@ -118,6 +118,41 @@ helpers ({bf:_hfc_abort}, {bf:_hfc_pause}, {bf:_hfc_mkdir}, {bf:_hfc_hide}) are
 ado files on the adopath, Stata reloads them on demand. Master used to carry
 four identical copies of each for this reason and now carries none.
 
+{pstd}
+{bf:Standalone mode.} A generated DO file that is copied away from its project
+still runs. The {bf:.hfc_root} walk is tried first, so a file inside a project
+can never take this path; only when no project is found above it does the file
+build a context from the folder it is sitting in. Datasets are discovered
+there (or in a {bf:Data/} subfolder), sorted by name into DS1, DS2, ..., with
+framework output — {bf:*_CLEANED}, {bf:*_KEYS_}, {bf:*_MERGED_},
+{bf:*_LABELED_} — excluded so a second run cannot read the first run's results
+as input. Output goes to {bf:MDF_Output/} beside the file. Nothing outside that
+folder is touched, the package need not be installed, and no network call is
+made. Zero datasets, or a count that does not match what the file was generated
+for, stops the run rather than guessing.
+
+{pstd}
+{bf:Why the cache is not consulted first.} When the walk fails, the tmpdir root
+cache left by an earlier Master run names a project this file may no longer
+belong to — following it would read that project's data and write results back
+into it. Standalone is tried first, and the cache is left for the one case where
+the file's own folder genuinely cannot be known.
+
+{pstd}
+{bf:Ctrl+A / Ctrl+D.} A selection run gives Stata no path for the file, so the
+working directory stands in for the file's folder. Measured on Stata 17,
+{cmd:c(do_current)} comes back empty rather than naming the temp file. Either
+way the run announces the folder it settled on, and stops if that folder holds
+no data.
+
+{pstd}
+{bf:Deliverables.} With {bf:$run_deliverables 1}, {cmd:mdf_deliverables} writes
+{bf:$ROOT/Deliverables} — the raw data, the processing workflow and the two
+modules it calls, the instrument, translation material where the workflow uses
+it, and the current clean dataset for comparison. Copied anywhere, the workflow
+inside it rebuilds the clean dataset on standalone mode. At 0 the stage returns
+before touching anything.
+
 
 {title:Author}
 

@@ -118,10 +118,11 @@ entire reason `_mdf_defs.ado` carries an `.ado` extension despite defining no ad
 
 ```
 mdf.ado                     `mdf run` / `mdf version`
-mdf_<stage>.ado             the 18 pipeline stages, in execution order
+mdf_<stage>.ado             the 19 pipeline stages, in execution order
 mdf_bootstrap.ado           load a project's globals inside a generated module
 mdf_core_vars.ado           derive fielddate / total_duration
 mdf_finalise.ado            post-cleaning merge and publish
+mdf_deliverables.ado        the reproducible client handover package (stage 19)
 _hfc_abort.ado              stop: a real error (exit 198)
 _hfc_pause.ado              stop: a workflow checkpoint (exit 0) — never the same thing
 _hfc_mkdir.ado              create a directory if absent
@@ -155,12 +156,53 @@ files. Tier 2 files are renamed to `.superseded`, never deleted.
 
 ---
 
+## A generated DO works away from its project
+
+Copy a generated DO somewhere else, put the dataset(s) it should read beside it, and run it. Finding
+no `.hfc_root` above itself, it builds a small context from that folder instead of stopping. The
+Master DO File is not needed, **this package does not have to be installed**, and nothing outside
+that folder is read or written.
+
+| | |
+|---|---|
+| works for | the Processing DO, `01_Labeling.do`, `02_Translation.do`, `03_Audio.do`, the HFC DO |
+| inputs | `*.dta` beside the DO, else in `Data/`. Sorted by name: first is DS1, second DS2 |
+| never an input | `*_CLEANED`, `*_KEYS_`, `*_MERGED_`, `*_LABELED_` — a second run cannot eat the first run's output |
+| optional | a `CAPI/` subfolder for labeling, a `Translation/` subfolder for returned text |
+| output | `MDF_Output/` beside the DO |
+| settings | whatever Section 0 held when the file was generated |
+
+It stops rather than guess. No dataset, or a count that does not match what the file was generated
+for, ends the run naming the folder and listing what it found.
+
+The order matters and is the point: the project walk runs **first**, so a file inside a project can
+never take this path. Only when that fails is standalone tried — and only then, if the folder cannot
+be known at all, the tmpdir root cache. Reaching for the cache first is what used to make a stranded
+HFC DO read another project's data and write its report back into that project.
+
+`Ctrl+A` / `Ctrl+D` gives Stata no path for the file, so the **working directory** stands in for the
+file's folder. Make them the same — *File > Change working directory*, or launch Stata by
+double-clicking the DO. The run always announces the folder it settled on.
+
+---
+
+## Deliverables
+
+`run_deliverables = 1` writes `$ROOT/Deliverables`: the raw data, the processing workflow and the two
+modules it calls, the questionnaire, translation material where the workflow uses it, and the current
+clean dataset for comparison. No daily download folders, no check history, no Master.
+
+Copy it anywhere and the workflow inside rebuilds the clean dataset on standalone mode, with no link
+to the project it came from. `run_deliverables = 0` builds nothing and leaves the run unchanged.
+
+---
+
 ## Versioning
 
 Master pins the framework it was written against:
 
 ```stata
-global mdf_required "10.1.1"      // Section 0
+global mdf_required "10.2.0"      // Section 0
 ```
 
 `mdf_setup` compares that against the installed version and updates only on a mismatch.
@@ -175,9 +217,22 @@ The two failure modes are deliberately not treated alike:
 
 Set `global mdf_autoinstall 0` to take the network out of the loop entirely.
 
-Bumping the version means changing it in **three** places, or the check re-installs on every run:
-`mdf.ado` (the `*!` header and both `return local version` lines), `_mdf_defs.ado` (the `*!`
-header), and `global mdf_required` in a project's Section 0.
+Bumping the version means changing it in **four** places. Miss one of the first three and the check
+re-installs on every run; miss the fourth and every project silently keeps generating against the old
+template:
+
+| where | what |
+|---|---|
+| `mdf.ado` | the `*!` header and **both** `return local version` lines |
+| `_mdf_defs.ado` | the `*!` header |
+| `mdf_setup.ado` | `global hfc_version` — stamped into every generated file as its Tier 2 template marker |
+| a project's Section 0 | `global mdf_required` |
+
+Every other `.ado` carries the stamp in its `*!` header too; those are documentation, not load-bearing.
+
+Raising `hfc_version` makes existing projects write `.do.new` beside their Tier 2 files rather than
+overwrite them — that is the ownership rule working, not a fault, but it does mean an existing
+project does not get a change to the generated files until the analyst merges.
 
 ---
 

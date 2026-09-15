@@ -137,6 +137,55 @@ program define mdf_readme
         file write `_mf' "starttime and duration. If a variable cannot be derived at all, the checks" _n
         file write `_mf' "that need it are skipped with a message rather than failing the run." _n
         file write `_mf' "" _n
+        file write `_mf' "## Standalone mode" _n
+        file write `_mf' "" _n
+        file write `_mf' "A generated DO file works when it is copied away from this project. Put it" _n
+        file write `_mf' "in a folder with the dataset(s) it should read and run it: finding no" _n
+        file write `_mf' "project above itself, it builds a small context from that folder instead." _n
+        file write `_mf' "It announces this, naming the folder and every dataset it picked up." _n
+        file write `_mf' "" _n
+        file write `_mf' "Nothing outside that folder is read or written, the Master DO File is not" _n
+        file write `_mf' "needed, the framework package does not have to be installed, and no" _n
+        file write `_mf' "network connection is used." _n
+        file write `_mf' "" _n
+        file write `_mf' "  Supported   the Processing DO, 01_Labeling.do, 02_Translation.do," _n
+        file write `_mf' "              03_Audio.do and the HFC DO." _n
+        file write `_mf' "  Inputs      *.dta beside the DO, or in a Data/ subfolder if there are" _n
+        file write `_mf' "              none beside it. Sorted by name: first is DS1, second DS2." _n
+        file write `_mf' "              Framework output (*_CLEANED, *_KEYS_, *_MERGED_," _n
+        file write `_mf' "              *_LABELED_) is never counted, so a second run cannot read" _n
+        file write `_mf' "              the first run's results as input." _n
+        file write `_mf' "  Extras      a CAPI/ or 02_CAPI/ subfolder is used for labeling; a" _n
+        file write `_mf' "              Translation/ or 05_Translation/ subfolder for returned text." _n
+        file write `_mf' "  Output      MDF_Output/ beside the DO." _n
+        file write `_mf' "  Settings    whatever Section 0 held when the file was generated." _n
+        file write `_mf' "" _n
+        file write `_mf' "It stops rather than guess. No dataset in the folder, or a number that" _n
+        file write `_mf' "does not match what the file was generated for, ends the run with a" _n
+        file write `_mf' "message naming the folder and listing what it found." _n
+        file write `_mf' "" _n
+        file write `_mf' "Running it with Ctrl+A then Ctrl+D gives Stata no path for the file, so" _n
+        file write `_mf' "the WORKING DIRECTORY stands in for the file's folder. Make them the same" _n
+        file write `_mf' "— File > Change working directory, or launch Stata by double-clicking the" _n
+        file write `_mf' "DO — or the run will look in the wrong place and say so." _n
+        file write `_mf' "" _n
+        file write `_mf' "Inside this project nothing changes: the project is found first and every" _n
+        file write `_mf' "file behaves exactly as it always has." _n
+        file write `_mf' "" _n
+        file write `_mf' "## Deliverables" _n
+        file write `_mf' "" _n
+        file write `_mf' "Set run_deliverables = 1 in Section 0 and the next run writes a" _n
+        file write `_mf' "Deliverables/ folder here. It holds only what is needed to rebuild the" _n
+        file write `_mf' "clean dataset from the raw data — the workflow, the modules it calls, the" _n
+        file write `_mf' "raw data, the questionnaire, translated text where the workflow uses it," _n
+        file write `_mf' "and the current clean dataset for comparison. No daily download folders," _n
+        file write `_mf' "no check history, no Master." _n
+        file write `_mf' "" _n
+        file write `_mf' "Copy that folder anywhere and the Processing DO inside it rebuilds the" _n
+        file write `_mf' "clean dataset on standalone mode, with no link back to this project." _n
+        file write `_mf' "Deliverables/README.txt tells the recipient how. At 0 nothing is built" _n
+        file write `_mf' "and the run is unchanged." _n
+        file write `_mf' "" _n
         file write `_mf' "## Where the explanations live" _n _n
         file write `_mf' "The generated DO files carry headings, not essays. Why the framework is" _n
         file write `_mf' "shaped this way is recorded once, in Instruction/DECISIONS.md, as a set of" _n
