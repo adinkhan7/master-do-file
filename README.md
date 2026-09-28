@@ -17,7 +17,7 @@ list of pipeline stages. Everything under the hood lives here.
 
 ```stata
 *  SECTION 0   USER CONFIGURATION                    ← EDIT ONLY THIS SECTION
-global project_name         "AUS MFS Labour Market 2026"
+global project_name         "Sample Project"
 global run_import           1
 global run_labeling         1
 ...
