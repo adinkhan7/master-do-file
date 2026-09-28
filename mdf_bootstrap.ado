@@ -30,15 +30,23 @@ program define mdf_bootstrap
         exit 198
     }
 
+    *  Find first, run after the loop. Under -version 16- a zero -exit- inside a
+    *  loop does not leave the program, it only ends the iteration: the loop
+    *  ran the directory file, went on to the next candidate, and fell through
+    *  to the error below. Measured in Stata 17; a fresh session hit it every
+    *  time, a session Master had already run skipped it via the test above.
+    local _dirfile ""
     foreach _cand in "05_Processing/01_Do Files/00a_Directory.do" "04_DO Files/00_Directory.do" {
-        cap confirm file `"`_root'/`_cand'"'
-        if !_rc {
-            do `"`_root'/`_cand'"'
-            exit 0
+        if `"`_dirfile'"' == "" {
+            cap confirm file `"`_root'/`_cand'"'
+            if !_rc local _dirfile `"`_root'/`_cand'"'
         }
     }
 
-    di as error `"mdf_bootstrap: the project's directory file was not found under `_root'."'
-    di as error  "               Run the project's Master DO file once, then retry."
-    exit 601
+    if `"`_dirfile'"' == "" {
+        di as error `"mdf_bootstrap: the project's directory file was not found under `_root'."'
+        di as error  "               Run the project's Master DO file once, then retry."
+        exit 601
+    }
+    do `"`_dirfile'"'
 end
