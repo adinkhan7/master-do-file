@@ -1,5 +1,5 @@
 *! _mdf_defs.ado — the Mata layer for the Master DO File framework
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  Loaded on demand by _mdf_load.ado. Never run this file directly.
 *!
@@ -10,8 +10,10 @@
 *!
 *!  Contents:
 *!    _hfc_find_root / _hfc_scan_locks / _hfc_rename_dir   framework helpers
-*!    mdf_directory_main()                                 writes 00_Directory,
-*!                                                         00a_Bootstrap, 00b_Overrides
+*!    mdf_directory_main()                                 writes the directory file
+*!                                                         (00a_Directory.do in v11,
+*!                                                         00_Directory.do in v10)
+*!                                                         and 00b_Local_Overrides.do
 *!    mdf_modules_main()                                   writes the pipeline modules,
 *!                                                         the HFC DO and Processing.do
 *!  The generator functions were lifted verbatim out of Master 10.1.0-rc1
@@ -97,6 +99,102 @@ flist = dir(old_p, "files", "*")
         unlink(src)
     }
     rmdir(old_p)
+}
+
+//  A path global relative to ROOT ("03_HFC/KEYS"; "" for ROOT itself), and
+//  the string a generated file carries for it ("<dollar>ROOT/03_HFC/KEYS").
+//  The dollar sign is built with char(36): this file is run with -do-, which
+//  expands macros in these lines, and a literal one would bake the author's
+//  ROOT into every generated file.
+string scalar _mdf_rel(string scalar g)
+{
+    string scalar r, v
+    r = subinstr(st_global("ROOT"), char(92), "/", .)
+    v = subinstr(st_global(g), char(92), "/", .)
+    if (v == r) return("")
+    if (substr(v, 1, strlen(r) + 1) == r + "/") return(substr(v, strlen(r) + 2, .))
+    return(v)
+}
+
+string scalar _mdf_rpath(string scalar g)
+{
+    string scalar rel
+    rel = _mdf_rel(g)
+    if (rel == "") return(char(36) + "ROOT")
+    return(char(36) + "ROOT/" + rel)
+}
+
+//  Is this .xlsx a SurveyCTO / XLSForm form? It is when its workbook holds a
+//  "survey" sheet and a "choices" sheet. Questionnaires kept as spreadsheets
+//  have neither, which is what lets a package hold both side by side.
+real scalar _mdf_is_xlsform(string scalar path)
+{
+    real scalar i, n, s, c
+    real matrix nm
+    string scalar w
+    if (!fileexists(path)) return(0)
+    if (_stata("qui import excel using " + char(34) + path + char(34) + ", describe", 1)) return(0)
+    nm = st_numscalar("r(N_worksheet)")
+    if (rows(nm) == 0 | cols(nm) == 0) return(0)
+    n = nm[1, 1]
+    if (n >= .) return(0)
+    s = 0
+    c = 0
+    for (i = 1; i <= n; i++) {
+        w = strlower(strtrim(st_global("r(worksheet_" + strofreal(i) + ")")))
+        if (w == "survey")  s = 1
+        if (w == "choices") c = 1
+    }
+    return(s & c)
+}
+
+//  Does a text file mention either string (case-insensitive)? Read in Mata:
+//  a line read into a Stata macro has its own macro references expanded
+//  when it is used, which makes a Stata-level scan of a DO file unreliable.
+real scalar _mdf_file_has(string scalar path, string scalar a, string scalar b)
+{
+    string colvector L
+    real scalar n
+    if (!fileexists(path)) return(0)
+    L = strlower(cat(path))
+    n = 0
+    if (a != "") n = n + sum(strpos(L, strlower(a)) :> 0)
+    if (b != "") n = n + sum(strpos(L, strlower(b)) :> 0)
+    return(n > 0)
+}
+
+//  Remove a directory tree. Used for exactly one folder — the Deliverables
+//  package, which is framework output rebuilt from scratch on every build —
+//  and refuses anything that is not a folder of that name directly under a
+//  project root carrying a .hfc_root sentinel.
+real scalar _mdf_rmtree_guarded(string scalar d, string scalar root)
+{
+    string scalar leaf
+    d    = subinstr(d, char(92), "/", .)
+    root = subinstr(root, char(92), "/", .)
+    leaf = substr(d, strrpos(d, "/") + 1, .)
+    if (root == "" | !fileexists(root + "/.hfc_root")) return(1)
+    if (d != root + "/" + leaf) return(1)
+    if (leaf != "08_Deliverables" & leaf != "Deliverables") return(1)
+    if (!direxists(d)) return(0)
+    return(_mdf_rmtree(d))
+}
+
+real scalar _mdf_rmtree(string scalar d)
+{
+    string colvector f, s
+    real scalar i, bad
+    bad = 0
+    f = dir(d, "files", "*", 1)
+    for (i = 1; i <= rows(f); i++) {
+        if (_unlink(f[i]) != 0) bad = 1
+    }
+    s = dir(d, "dirs", "*", 1)
+    for (i = 1; i <= rows(s); i++) {
+        if (_mdf_rmtree(s[i]) != 0) bad = 1
+    }
+    if (_rmdir(d) != 0) bad = 1
+    return(bad)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -251,7 +349,7 @@ void standalone_block(
 
     //  ── Portable ROOT detection ────────────────────────────────────────────────
     fput(fh, "    *  ── Portable ROOT detection ─────────────────────────────────────────")
-    fput(fh, "    *  This file lives in ROOT/04_DO Files/.")
+    fput(fh, "    *  This file lives in ROOT/" + _mdf_rel("dofiles_dir") + "/.")
     fput(fh, "    *  ROOT is derived at run-time — no hardcoded paths.")
     fput(fh, "    if " + q + dol + "ROOT" + q + " == " + q + q + " {")
     fput(fh, "")
@@ -320,7 +418,7 @@ void standalone_block(
     fput(fh, "            _hfc_dirof " + bt + q + bt + "c(do_current)" + ap + q + ap)
     fput(fh, "            if " + q + bt + "_dirof" + ap + q + " != " + q + q + " {")
     fput(fh, "                local _p2 = subinstr(" + q + bt + "_dirof" + ap + q + ", " + q + bs + q + ", " + q + "/" + q + ", .)")
-    fput(fh, "                local _rt = subinstr(" + q + bt + "_p2" + ap + q + ", " + q + "/04_DO Files" + q + ", " + q + q + ", 1)")
+    fput(fh, "                local _rt = subinstr(" + q + bt + "_p2" + ap + q + ", " + q + "/" + _mdf_rel("dofiles_dir") + q + ", " + q + q + ", 1)")
     fput(fh, "                if " + q + bt + "_rt" + ap + q + " != " + q + bt + "_p2" + ap + q + " local _this_root " + q + bt + "_rt" + ap + q)
     fput(fh, "            }")
     fput(fh, "        }")
@@ -331,7 +429,7 @@ void standalone_block(
     fput(fh, "            _hfc_dirof " + bt + q + bt + "c(filename)" + ap + q + ap)
     fput(fh, "            if " + q + bt + "_dirof" + ap + q + " != " + q + q + " {")
     fput(fh, "                local _p2 = subinstr(" + q + bt + "_dirof" + ap + q + ", " + q + bs + q + ", " + q + "/" + q + ", .)")
-    fput(fh, "                local _rt = subinstr(" + q + bt + "_p2" + ap + q + ", " + q + "/04_DO Files" + q + ", " + q + q + ", 1)")
+    fput(fh, "                local _rt = subinstr(" + q + bt + "_p2" + ap + q + ", " + q + "/" + _mdf_rel("dofiles_dir") + q + ", " + q + q + ", 1)")
     fput(fh, "                if " + q + bt + "_rt" + ap + q + " != " + q + bt + "_p2" + ap + q + " local _this_root " + q + bt + "_rt" + ap + q)
     fput(fh, "            }")
     fput(fh, "        }")
@@ -434,29 +532,35 @@ void standalone_block(
     fput(fh, "    end")
 
     //  ── Folder globals ─────────────────────────────────────────────────────────
-    fput(fh, "    *  ── Folder globals (v10 layout) ────────────────────────────────────────")
-    fput(fh, "    global surv_inst_dir        " + q + dol + "ROOT/01_Survey_Instruments" + q)
-    fput(fh, "    global quest_dir            " + q + dol + "ROOT/01_Survey_Instruments/01_Questionnaire" + q)
-    fput(fh, "    global capi_dir             " + q + dol + "ROOT/01_Survey_Instruments/02_CAPI" + q)
-    fput(fh, "    global others_dir           " + q + dol + "ROOT/01_Survey_Instruments/03_Others" + q)
-    fput(fh, "    global data_dir             " + q + dol + "ROOT/02_Data" + q)
-    fput(fh, "    global hfc_dir              " + q + dol + "ROOT/03_HFC" + q)
-    fput(fh, "    global dofiles_dir          " + q + dol + "ROOT/04_DO Files" + q)
-    fput(fh, "    global translation_dir      " + q + dol + "ROOT/05_Translation" + q)
-    fput(fh, "    global processing_dir       " + q + dol + "ROOT/06_Processing Files" + q)
+    //  Emitted from the path globals mdf_paths set, relative to ROOT, so the
+    //  file describes whichever layout this project uses (ADR-058). For a v10
+    //  project every line is the string the v10 generator hard-coded.
+    fput(fh, "    *  ── Folder globals (" + st_global("hfc_layout_version") + " layout) ────────────────────────────────────────")
+    fput(fh, "    global hfc_layout_version   " + q + st_global("hfc_layout_version") + q)
+    fput(fh, "    global surv_inst_dir        " + q + _mdf_rpath("surv_inst_dir") + q)
+    fput(fh, "    global quest_dir            " + q + _mdf_rpath("quest_dir") + q)
+    fput(fh, "    global capi_dir             " + q + _mdf_rpath("capi_dir") + q)
+    fput(fh, "    global others_dir           " + q + _mdf_rpath("others_dir") + q)
+    fput(fh, "    global data_dir             " + q + _mdf_rpath("data_dir") + q)
+    fput(fh, "    global hfc_dir              " + q + _mdf_rpath("hfc_dir") + q)
+    fput(fh, "    global dofiles_dir          " + q + _mdf_rpath("dofiles_dir") + q)
+    fput(fh, "    global translation_dir      " + q + _mdf_rpath("translation_dir") + q)
+    fput(fh, "    global processing_dir       " + q + _mdf_rpath("processing_dir") + q)
     fput(fh, "    global processing_file      " + q + dol + "{project_name}_Processing.do" + q)
-    fput(fh, "    global clean_dir            " + q + dol + "ROOT/07_Cleaned Dataset" + q)
+    fput(fh, "    global clean_dir            " + q + _mdf_rpath("clean_dir") + q)
+    fput(fh, "    global deliv_dir            " + q + _mdf_rpath("deliv_dir") + q)
+    fput(fh, "    global directory_file       " + q + st_global("directory_file") + q)
     fput(fh, "")
-    fput(fh, "    global hfc_keys_dir         " + q + dol + "ROOT/03_HFC/KEYS" + q)
-    fput(fh, "    global hfc_keys_hfc_dir     " + q + dol + "ROOT/03_HFC/KEYS/01_HFC_Keys" + q)
-    fput(fh, "    global hfc_keys_audio_dir   " + q + dol + "ROOT/03_HFC/KEYS/02_Audio_Keys" + q)
-    fput(fh, "    global hfc_keys_trans_dir   " + q + dol + "ROOT/03_HFC/KEYS/03_Translation_Keys" + q)
-    fput(fh, "    global hfc_flag_dir         " + q + dol + "ROOT/03_HFC/KEYS/.flag_history" + q)
+    fput(fh, "    global hfc_keys_dir         " + q + _mdf_rpath("hfc_keys_dir") + q)
+    fput(fh, "    global hfc_keys_hfc_dir     " + q + _mdf_rpath("hfc_keys_hfc_dir") + q)
+    fput(fh, "    global hfc_keys_audio_dir   " + q + _mdf_rpath("hfc_keys_audio_dir") + q)
+    fput(fh, "    global hfc_keys_trans_dir   " + q + _mdf_rpath("hfc_keys_trans_dir") + q)
+    fput(fh, "    global hfc_flag_dir         " + q + _mdf_rpath("hfc_flag_dir") + q)
     fput(fh, "    cap mkdir " + q + dol + "hfc_flag_dir" + q)
     fput(fh, "    _hfc_hide " + q + dol + "hfc_flag_dir" + q + " 1")
-    fput(fh, "    global trans_exported_dir   " + q + dol + "ROOT/05_Translation/01_Exported" + q)
-    fput(fh, "    global trans_translated_dir " + q + dol + "ROOT/05_Translation/02_Translated" + q)
-    fput(fh, "    global processing_data_dir  " + q + dol + "ROOT/06_Processing Files/Data" + q)
+    fput(fh, "    global trans_exported_dir   " + q + _mdf_rpath("trans_exported_dir") + q)
+    fput(fh, "    global trans_translated_dir " + q + _mdf_rpath("trans_translated_dir") + q)
+    fput(fh, "    global processing_data_dir  " + q + _mdf_rpath("processing_data_dir") + q)
     fput(fh, "")
     fput(fh, "    *  ── Path aliases ──────────────────────────────────────")
     fput(fh, "    global hfc_dofiles_dir      " + q + dol + "dofiles_dir" + q)
@@ -690,7 +794,8 @@ void mdf_directory_main()
     tver   = st_local("_tver")
     procdir = st_local("_procdir")
 
-    p = dodir + "/00_Directory.do"
+    //  00a_Directory.do in a v11 project, 00_Directory.do in a v10 one (ADR-058).
+    p = dodir + "/" + st_global("directory_file")
     if (fileexists(p)) unlink(p)
     fh = fopen(p, "w")
     fput(fh, "*==============================================================================*")
@@ -699,7 +804,7 @@ void mdf_directory_main()
     fput(fh, "")
     standalone_block(fh, q, bt, ap, dol, "", pname, ssize, meta, tail_v, tstart, tend, nds, 1)
     fclose(fh)
-    printf("  00_Directory.do: written\n")
+    printf("  %s: written\n", st_global("directory_file"))
 
 
     p = dodir + "/00b_Local_Overrides.do"
@@ -820,7 +925,8 @@ void write_selection_guard(real scalar fh, string scalar q, string scalar bt, st
     fput(fh, "            if " + bt + q + bt + "_sg_line" + ap + q + ap + " != " + q + q + " local _sg_root " + bt + q + bt + "_sg_line" + ap + q + ap)
     fput(fh, "        }")
     fput(fh, "    }")
-    fput(fh, "    cap do " + q + bt + "_sg_root" + ap + "/04_DO Files/00_Directory.do" + q)
+    //  mdf_bootstrap knows where each layout keeps its directory file (ADR-058).
+    fput(fh, "    cap mdf_bootstrap " + bt + q + bt + "_sg_root" + ap + q + ap)
     fput(fh, "}")
 }
 
@@ -1095,6 +1201,11 @@ void write_labeling_module(
     fput(fh, "            else {")
     fput(fh, "                local _rdirs : dir " + q + dol + "capi_dir" + q + " dirs " + q + bt + "_fnum" + ap + "_SurveyCTO_*" + q)
     fput(fh, "                gettoken _rfolder : _rdirs")
+    //  v11 names the per-dataset form folder NN_<dataset> (ADR-058).
+    fput(fh, "                if " + q + bt + "_rfolder" + ap + q + " == " + q + q + " {")
+    fput(fh, "                    local _rdirs : dir " + q + dol + "capi_dir" + q + " dirs " + q + bt + "_fnum" + ap + "_*" + q)
+    fput(fh, "                    gettoken _rfolder : _rdirs")
+    fput(fh, "                }")
     fput(fh, "                if " + q + bt + "_rfolder" + ap + q + " != " + q + q + " {")
     fput(fh, "                    local _folder " + q + bt + "_rfolder" + ap + q)
     fput(fh, "                }")
@@ -1196,7 +1307,14 @@ void write_labeling_part2(
     fput(fh, "local _f " + q + q)
     fput(fh, "local _base " + q + q)
     fput(fh, "")
-    fput(fh, "if " + dol + "actual_n_dta == 1 {")
+    //  Standalone and package mode have already mapped each dataset to one
+    //  file, by name. Sorted position cannot stand in for that in a package
+    //  that carries a single dataset of several; inside a project this branch
+    //  is never taken (ADR-059).
+    fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " & " + bt + q + dol + "{dta_labeled_" + bt + "_ds" + ap + "}" + q + ap + " != " + q + q + " {")
+    fput(fh, "    local _f = ustrregexra(" + bt + q + dol + "{dta_labeled_" + bt + "_ds" + ap + "}" + q + ap + ", " + q + "^.*/" + q + ", " + q + q + ")")
+    fput(fh, "}")
+    fput(fh, "else if " + dol + "actual_n_dta == 1 {")
     fput(fh, "    local _arch : dir " + q + dol + "hfc_rawdata_dir" + q + " files " + q + "*_" + dol + "hfc_folder_date.dta" + q + ", respectcase")
     fput(fh, "    *  dir may return compound quotes when paths contain spaces; foreach")
     fput(fh, "    *  strips them. break exits after the first item.")
@@ -1255,6 +1373,9 @@ void write_labeling_part2(
     fput(fh, "local _base = subinstr(" + q + bt + "_f" + ap + q + ", " + q + "_" + dol + "hfc_folder_date.dta" + q + ", " + q + q + ", 1)")
     fput(fh, "local _base = subinstr(" + q + bt + "_base" + ap + q + ", " + q + ".dta" + q + ", " + q + q + ", 1)")
     fput(fh, "if " + q + dol + "{ds" + bt + "_ds" + ap + "_name}" + q + " != " + q + q + " local _base " + q + dol + "{ds" + bt + "_ds" + ap + "_name}" + q)
+    //  The Processing DO saves under the context's dataset name; the pointer
+    //  set below must name the same file or publishing finds nothing.
+    fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " & " + q + dol + "{auto_dsname_" + bt + "_ds" + ap + "}" + q + " != " + q + q + " local _base " + q + dol + "{auto_dsname_" + bt + "_ds" + ap + "}" + q)
     fput(fh, "")
     fput(fh, "*  ── Apply CAPI value labels (or load raw when labeling is off) ─────────────")
     fput(fh, "local _capi " + q + dol + "{capi_form_" + bt + "_ds" + ap + "}" + q)
@@ -1319,8 +1440,9 @@ string scalar _cq(string scalar nm)
 //  the result is passed through `: list sort', and the framework's own output
 //  is filtered out by name so a second run cannot read the first run's results
 //  as input. The DO's own folder is searched first; only if it holds no
-//  candidate are Data/, 02_Data/ and 01_Data/ tried, which is what lets a
-//  Deliverables package work without a second discovery rule.
+//  candidate are Data/, 02_Data/, 01_Data/ and 03_Data/ tried. 03_Data/ is the
+//  v11 working-data folder and is tried last, so every folder v10.2.0 searched
+//  keeps its precedence.
 //
 //  Leaves behind:  `_sa_cand'     sorted candidate filenames
 //                  `_sa_k'        how many
@@ -1333,7 +1455,7 @@ void standalone_discover(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "local _sa_datadir " + _cq("_selfdir"))
     fput(fh, ind + "local _sa_cand " + q + q)
     fput(fh, ind + "local _sa_k 0")
-    fput(fh, ind + "foreach _sa_try in " + q + "." + q + " " + q + "Data" + q + " " + q + "02_Data" + q + " " + q + "01_Data" + q + " {")
+    fput(fh, ind + "foreach _sa_try in " + q + "." + q + " " + q + "Data" + q + " " + q + "02_Data" + q + " " + q + "01_Data" + q + " " + q + "03_Data" + q + " {")
     fput(fh, ind + "    if " + _mq("_sa_k") + " == 0 {")
     fput(fh, ind + "        local _sa_dir " + _cq("_selfdir"))
     fput(fh, ind + "        if " + q + _mq("_sa_try") + q + " != " + q + "." + q + " local _sa_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_try" + ap + q + ap)
@@ -1341,12 +1463,7 @@ void standalone_discover(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "        cap local _sa_raw : dir " + _cq("_sa_dir") + " files " + q + "*.dta" + q + ", respectcase")
     fput(fh, ind + "        local _sa_srt : list sort _sa_raw")
     fput(fh, ind + "        foreach _sa_f of local _sa_srt {")
-    fput(fh, ind + "            local _sa_ok 1")
-    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_KEYS_" + q + ")    > 0 local _sa_ok 0")
-    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_CLEANED" + q + ")  > 0 local _sa_ok 0")
-    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_MERGED_" + q + ")  > 0 local _sa_ok 0")
-    fput(fh, ind + "            if strpos(" + _cq("_sa_f") + ", " + q + "_LABELED_" + q + ") > 0 local _sa_ok 0")
-    fput(fh, ind + "            if substr(" + _cq("_sa_f") + ", 1, 1) == " + q + "_" + q + " local _sa_ok 0")
+    write_sa_filter(fh, q, bt, ap, ind + "            ")
     fput(fh, ind + "            if " + _mq("_sa_ok") + " == 1 {")
     fput(fh, ind + "                local _sa_cand " + bt + q + bt + "_sa_cand" + ap + " " + bt + q + bt + "_sa_f" + ap + q + ap + q + ap)
     fput(fh, ind + "            }")
@@ -1357,44 +1474,144 @@ void standalone_discover(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "}")
 }
 
+//  The framework's own output is never input: a second run must not read
+//  the first run's results as data.
+void write_sa_filter(real scalar fh, string scalar q, string scalar bt,
+                     string scalar ap, string scalar ind)
+{
+    pragma unused bt
+    pragma unused ap
+    fput(fh, ind + "local _sa_ok 1")
+    fput(fh, ind + "if strpos(" + _cq("_sa_f") + ", " + q + "_KEYS_" + q + ")    > 0 local _sa_ok 0")
+    fput(fh, ind + "if strpos(" + _cq("_sa_f") + ", " + q + "_CLEANED" + q + ")  > 0 local _sa_ok 0")
+    fput(fh, ind + "if strpos(" + _cq("_sa_f") + ", " + q + "_MERGED_" + q + ")  > 0 local _sa_ok 0")
+    fput(fh, ind + "if strpos(" + _cq("_sa_f") + ", " + q + "_LABELED_" + q + ") > 0 local _sa_ok 0")
+    fput(fh, ind + "if substr(" + _cq("_sa_f") + ", 1, 1) == " + q + "_" + q + " local _sa_ok 0")
+}
+
+//  Discover the raw data of a Deliverables package (ADR-059). One folder is
+//  read — 02_Import & Raw files/ — with the same filters as above, so the
+//  package's own cleaned output can never be read back as its input.
+void package_discover(real scalar fh, string scalar q, string scalar bt,
+                      string scalar ap, string scalar ind)
+{
+    fput(fh, ind + "*  ── The package's raw data: 02_Import & Raw files/ ─────────────────")
+    fput(fh, ind + "local _sa_datadir " + bt + q + bt + "_sa_pkg" + ap + "/02_Import & Raw files" + q + ap)
+    fput(fh, ind + "local _sa_cand " + q + q)
+    fput(fh, ind + "local _sa_raw " + q + q)
+    fput(fh, ind + "cap local _sa_raw : dir " + _cq("_sa_datadir") + " files " + q + "*.dta" + q + ", respectcase")
+    fput(fh, ind + "local _sa_srt : list sort _sa_raw")
+    fput(fh, ind + "foreach _sa_f of local _sa_srt {")
+    write_sa_filter(fh, q, bt, ap, ind + "    ")
+    fput(fh, ind + "    if " + _mq("_sa_ok") + " == 1 {")
+    fput(fh, ind + "        local _sa_cand " + bt + q + bt + "_sa_cand" + ap + " " + bt + q + bt + "_sa_f" + ap + q + ap + q + ap)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+    fput(fh, ind + "local _sa_k : list sizeof _sa_cand")
+}
+
+//  The survey commands a package rebuild may need, and where Master installs
+//  each from — the same sources as the DEPENDENCIES block of the Master DO
+//  file. Kept in one place so the two cannot drift apart silently.
+string colvector _mdf_dep_names()
+{
+    return(("odksplit" \ "inputcorrection" \ "mrtab" \ "exportopenended" \
+            "recode_nrep" \ "recode_rep" \ "multisplit" \ "exporttabs" \
+            "exportables" \ "exprep" \ "bias_expo" \ "export_hfc" \ "recode_oth"))
+}
+
+string scalar _mdf_dep_install(string scalar nm)
+{
+    string scalar gh, q
+    q  = char(34)
+    gh = "https://raw.githubusercontent.com/"
+    if (nm == "odksplit")        return("ssc install odksplit")
+    if (nm == "mrtab")           return("ssc install mrtab")
+    if (nm == "inputcorrection") return("net install inputcorrection, from(" + q + gh + "RanaRedoan/inputcorrection/main" + q + ")")
+    if (nm == "exportopenended") return("net install exportopenended, from(" + q + gh + "RanaRedoan/exportopenended/main" + q + ")")
+    if (nm == "exporttabs")      return("net install exporttabs, from(" + q + gh + "RanaRedoan/exporttabs/main" + q + ")")
+    if (nm == "recode_nrep")     return("net install recode_nrep, from(" + q + gh + "ashikpydev/recode_nrep/main/" + q + ")")
+    if (nm == "recode_rep")      return("net install recode_rep, from(" + q + gh + "ashikpydev/recode_rep/main/" + q + ")")
+    if (nm == "multisplit")      return("net install multisplit, from(" + q + gh + "ashikpydev/multisplit/main/" + q + ")")
+    if (nm == "exportables")     return("net install exportables, from(" + q + gh + "ashikpydev/exportables/main/" + q + ") replace")
+    if (nm == "exprep")          return("net install exprep, from(" + q + gh + "ashikpydev/exprep/main" + q + ")")
+    if (nm == "recode_oth")      return("net install recode_oth, from(" + q + gh + "ashikpydev/recode_oth/main/" + q + ") replace")
+    if (nm == "bias_expo")       return("net install bias_expo, from(" + q + gh + "adinkhan7/bias_expo/main/" + q + ")")
+    if (nm == "export_hfc")      return("net install export_hfc, from(" + q + gh + "adinkhan7/export_hfc/main/" + q + ")")
+    return("")
+}
+
 //  Build the standalone execution context.
 //
-//  `nds'   how many datasets this file was generated for — the count the
-//          folder must match, or the run stops rather than guess.
+//  Two shapes share it (ADR-056, ADR-059):
+//    generic   a file carried off on its own, data beside it, output to
+//              MDF_Output/ — exactly as in 10.2.0
+//    package   a file inside a Deliverables package: raw data from
+//              02_Import & Raw files/, datasets identified BY NAME against the
+//              names this file was generated with, the cleaned dataset written
+//              to 04_Cleaned Data/, working files to Stata's temp folder
+//
+//  `nds'   how many datasets this file was generated for
 //  `needs' which package commands this particular file calls, so it carries a
 //          fallback only for what it uses: "core", "finalise", or both.
-void standalone_context(real scalar fh, string scalar q, string scalar bt,
+void sa_part_checks(real scalar fh, string scalar q, string scalar bt,
                         string scalar ap, string scalar dol,
                         string scalar pname, string scalar nds,
                         string scalar needs, string scalar ind)
 {
-    real scalar _k
+    real scalar _k, _nb
+    string scalar bs, procfile
+    string colvector deps
+
+    bs = char(92)
+    procfile = pname + "_Processing.do"
+    pragma unused _nb
+    pragma unused deps
+    pragma unused procfile
 
     fput(fh, ind + "*  ══ STANDALONE MODE ═══════════════════════════════════════════════")
-    fput(fh, ind + "*  No project above this file, but data beside it. Everything below is")
-    fput(fh, ind + "*  rooted in this folder; nothing outside it is read or written.")
+    fput(fh, ind + "*  No project above this file: either data beside it, or a Deliverables")
+    fput(fh, ind + "*  package around it. Everything below is rooted in that folder; nothing")
+    fput(fh, ind + "*  outside it is read or written, except Stata's own temp folder.")
     fput(fh, "")
 
     //  ── Fail loudly: nothing to work on ────────────────────────────────────
     fput(fh, ind + "if " + _mq("_sa_k") + " == 0 {")
     fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
-    fput(fh, ind + "    di as error " + q + "  STANDALONE MODE  —  NO DATASET FOUND BESIDE THIS FILE" + q)
-    fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
-    fput(fh, ind + "    di as txt   " + q + "  This file is not inside a Master DO File project, so it looked" + q)
-    fput(fh, ind + "    di as txt   " + q + "  for Stata datasets in its own folder and found none:" + q)
-    fput(fh, ind + "    di as result " + q + "    " + q + " " + _cq("_selfdir"))
-    fput(fh, ind + "    di as txt   " + q + "  Put the .dta file(s) this file should read in that folder (or in" + q)
-    fput(fh, ind + "    di as txt   " + q + "  a Data/ subfolder) and run it again." + q)
-    fput(fh, ind + "    di as txt   " + q + "  Framework output — *_CLEANED, *_KEYS_, *_MERGED_, *_LABELED_ — is" + q)
-    fput(fh, ind + "    di as txt   " + q + "  never counted as input, so an earlier run's results cannot stand" + q)
-    fput(fh, ind + "    di as txt   " + q + "  in for data." + q)
+    fput(fh, ind + "    if " + q + dol + "mdf_package" + q + " == " + q + "1" + q + " {")
+    fput(fh, ind + "        di as error " + q + "  DELIVERABLES PACKAGE  —  NO RAW DATASET TO REBUILD FROM" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as txt   " + q + "  This file sits in a Deliverables package, but the package's raw-data" + q)
+    fput(fh, ind + "        di as txt   " + q + "  folder holds no Stata dataset:" + q)
+    fput(fh, ind + "        di as result " + q + "    " + q + " " + _cq("_sa_datadir"))
+    fput(fh, ind + "        di as txt   " + q + "  Put the raw .dta that came with the package back in that folder, or" + q)
+    fput(fh, ind + "        di as txt   " + q + "  run its import DO there to rebuild it from the CSV, then run again." + q)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    else {")
+    fput(fh, ind + "        di as error " + q + "  STANDALONE MODE  —  NO DATASET FOUND BESIDE THIS FILE" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as txt   " + q + "  This file is not inside a Master DO File project, so it looked" + q)
+    fput(fh, ind + "        di as txt   " + q + "  for Stata datasets in its own folder and found none:" + q)
+    fput(fh, ind + "        di as result " + q + "    " + q + " " + _cq("_selfdir"))
+    fput(fh, ind + "        di as txt   " + q + "  Stata does not tell a running DO file where it is saved, so that" + q)
+    fput(fh, ind + "        di as txt   " + q + "  folder is Stata's WORKING DIRECTORY. If this file is somewhere else," + q)
+    fput(fh, ind + "        di as txt   " + q + "  set the working directory to its folder (File > Change working" + q)
+    fput(fh, ind + "        di as txt   " + q + "  directory, or double-click the DO to launch Stata there) and run it" + q)
+    fput(fh, ind + "        di as txt   " + q + "  again. If it is there, put the .dta file(s) it should read in that" + q)
+    fput(fh, ind + "        di as txt   " + q + "  folder (or in a Data/ subfolder) and run it again." + q)
+    fput(fh, ind + "        di as txt   " + q + "  Framework output — *_CLEANED, *_KEYS_, *_MERGED_, *_LABELED_ — is" + q)
+    fput(fh, ind + "        di as txt   " + q + "  never counted as input, so an earlier run's results cannot stand" + q)
+    fput(fh, ind + "        di as txt   " + q + "  in for data." + q)
+    fput(fh, ind + "    }")
     fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
     fput(fh, ind + "    exit 198")
     fput(fh, ind + "}")
     fput(fh, "")
 
-    //  ── Fail loudly: the folder does not match what this file was built for ─
-    fput(fh, ind + "if " + _mq("_sa_k") + " != " + nds + " {")
+    //  ── Fail loudly: a generic folder that does not match this file ────────
+    //  A package is matched by NAME below instead: a per-dataset package
+    //  legitimately carries fewer datasets than the file was built for.
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " & " + _mq("_sa_k") + " != " + nds + " {")
     fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
     fput(fh, ind + "    di as error " + q + "  STANDALONE MODE  —  DATASET COUNT DOES NOT MATCH THIS FILE" + q)
     fput(fh, ind + "    di as error " + q + "=====================================================================" + q)
@@ -1411,22 +1628,129 @@ void standalone_context(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "    exit 198")
     fput(fh, ind + "}")
     fput(fh, "")
+}
+
+void sa_part_identity(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    real scalar _k, _nb
+    string scalar bs, procfile
+    string colvector deps
+
+    bs = char(92)
+    procfile = pname + "_Processing.do"
+    pragma unused _nb
+    pragma unused deps
+    pragma unused procfile
 
     //  ── Identity: the same DS1..DSn concepts a managed project uses ────────
     fput(fh, ind + "global mdf_standalone 1")
-    fput(fh, ind + "global ROOT " + _cq("_selfdir"))
     fput(fh, ind + "global project_name " + q + pname + q)
-    fput(fh, ind + "global actual_n_dta " + _mq("_sa_k"))
-    fput(fh, ind + "global n_datasets   " + _mq("_sa_k"))
-    fput(fh, ind + "forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
-    fput(fh, ind + "    local _sa_f : word " + _mq("_sa_i") + " of " + _mq("_sa_cand"))
-    fput(fh, ind + "    global auto_dsname_" + _mq("_sa_i") + " = substr(" + _cq("_sa_f") + ", 1, strlen(" + _cq("_sa_f") + ") - 4)")
-    fput(fh, ind + "    global target_dta_"  + _mq("_sa_i") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
-    fput(fh, ind + "    global dta_labeled_" + _mq("_sa_i") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " {")
+    fput(fh, ind + "    global ROOT " + _cq("_selfdir"))
+    fput(fh, ind + "    global actual_n_dta " + _mq("_sa_k"))
+    fput(fh, ind + "    global n_datasets   " + _mq("_sa_k"))
+    fput(fh, ind + "    forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
+    fput(fh, ind + "        local _sa_f : word " + _mq("_sa_i") + " of " + _mq("_sa_cand"))
+    fput(fh, ind + "        global auto_dsname_" + _mq("_sa_i") + " = substr(" + _cq("_sa_f") + ", 1, strlen(" + _cq("_sa_f") + ") - 4)")
+    fput(fh, ind + "        global target_dta_"  + _mq("_sa_i") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "        global dta_labeled_" + _mq("_sa_i") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "        global mdf_ds_here_" + _mq("_sa_i") + " 1")
+    fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+    fput(fh, ind + "else {")
+    fput(fh, ind + "    *  ── Package: every raw dataset must be one this file was built for ──")
+    fput(fh, ind + "    *  Identity is the dataset NAME, as Master derives it from the import:")
+    fput(fh, ind + "    *  the .dta name, with SurveyCTO's _wide suffix dropped. A file that")
+    fput(fh, ind + "    *  answers to no name, or to a name already taken, stops the run.")
+    fput(fh, ind + "    global ROOT " + _cq("_sa_pkg"))
+    _nb = strtoreal(nds)
+    if (_nb >= . | _nb < 1) _nb = 1
+    fput(fh, ind + "    local _pk_n " + strofreal(_nb))
+    for (_k = 1; _k <= _nb; _k++) {
+        fput(fh, ind + "    local _pk_nm" + strofreal(_k) + " " + q + st_global("auto_dsname_" + strofreal(_k)) + q)
+    }
+    fput(fh, ind + "    global actual_n_dta " + _mq("_pk_n"))
+    fput(fh, ind + "    global n_datasets   " + _mq("_pk_n"))
+    fput(fh, ind + "    forvalues _pk_i = 1/" + _mq("_pk_n") + " {")
+    fput(fh, ind + "        global auto_dsname_" + _mq("_pk_i") + " " + bt + q + bt + "_pk_nm" + bt + "_pk_i" + ap + ap + q + ap)
+    fput(fh, ind + "        global target_dta_"  + _mq("_pk_i") + " " + q + q)
+    fput(fh, ind + "        global dta_labeled_" + _mq("_pk_i") + " " + q + q)
+    fput(fh, ind + "        global mdf_ds_here_" + _mq("_pk_i") + " 0")
+    fput(fh, ind + "        global capi_override_" + _mq("_pk_i") + " " + q + q)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    local _pk_bad " + q + q)
+    fput(fh, ind + "    foreach _sa_f of local _sa_cand {")
+    fput(fh, ind + "        local _pk_stem = substr(" + _cq("_sa_f") + ", 1, strlen(" + _cq("_sa_f") + ") - 4)")
+    fput(fh, ind + "        if strlen(" + _cq("_pk_stem") + ") > 5 & lower(substr(" + _cq("_pk_stem") + ", -5, 5)) == " + q + "_wide" + q + " local _pk_stem = substr(" + _cq("_pk_stem") + ", 1, strlen(" + _cq("_pk_stem") + ") - 5)")
+    fput(fh, ind + "        local _pk_hit 0")
+    fput(fh, ind + "        *  A one-dataset package holding one file: nothing to tell apart.")
+    fput(fh, ind + "        if " + _mq("_pk_n") + " == 1 & " + _mq("_sa_k") + " == 1 local _pk_hit 1")
+    fput(fh, ind + "        forvalues _pk_i = 1/" + _mq("_pk_n") + " {")
+    fput(fh, ind + "            if " + _mq("_pk_hit") + " == 0 & lower(" + _cq("_pk_stem") + ") == lower(" + bt + q + bt + "_pk_nm" + bt + "_pk_i" + ap + ap + q + ap + ") local _pk_hit " + _mq("_pk_i"))
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        local _pk_dup 0")
+    fput(fh, ind + "        if " + _mq("_pk_hit") + " > 0 {")
+    fput(fh, ind + "            if " + q + dol + "{mdf_ds_here_" + _mq("_pk_hit") + "}" + q + " == " + q + "1" + q + " local _pk_dup 1")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        if " + _mq("_pk_hit") + " == 0 | " + _mq("_pk_dup") + " == 1 {")
+    fput(fh, ind + "            local _pk_bad " + bt + q + bt + "_pk_bad" + ap + " " + bt + q + bt + "_sa_f" + ap + q + ap + q + ap)
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        else {")
+    fput(fh, ind + "            global mdf_ds_here_" + _mq("_pk_hit") + " 1")
+    fput(fh, ind + "            global target_dta_"  + _mq("_pk_hit") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "            global dta_labeled_" + _mq("_pk_hit") + " " + bt + q + bt + "_sa_datadir" + ap + "/" + bt + "_sa_f" + ap + q + ap)
+    fput(fh, ind + "        }")
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    if " + _cq("_pk_bad") + " != " + q + q + " {")
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as error " + q + "  DELIVERABLES PACKAGE  —  A DATASET COULD NOT BE IDENTIFIED" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as txt   " + q + "  Every raw dataset in the package must be one this file was built" + q)
+    fput(fh, ind + "        di as txt   " + q + "  for, named as it was in the project. These are not:" + q)
+    fput(fh, ind + "        foreach _sa_f of local _pk_bad {")
+    fput(fh, ind + "            di as result " + q + "    " + q + " " + _cq("_sa_f"))
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        di as txt   " + q + "  Looked in: " + q + " " + _cq("_sa_datadir"))
+    fput(fh, ind + "        di as txt   " + q + "  This file knows these datasets:" + q)
+    fput(fh, ind + "        forvalues _pk_i = 1/" + _mq("_pk_n") + " {")
+    fput(fh, ind + "            di as result " + q + "    " + q + " " + bt + q + bt + "_pk_nm" + bt + "_pk_i" + ap + ap + ".dta" + q + ap)
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        di as txt   " + q + "  Which dataset a file is cannot be guessed, and guessing would clean" + q)
+    fput(fh, ind + "        di as txt   " + q + "  the wrong data. Rename or remove the file(s) above and run again." + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        exit 198")
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    *  A dataset this package does not carry has no cleaned file to publish.")
+    fput(fh, ind + "    *  Its pointer is cleared so a pointer left in this Stata session by")
+    fput(fh, ind + "    *  another package cannot be published here in its place. A carried")
+    fput(fh, ind + "    *  dataset's pointer is left alone: the Processing DO sets it before")
+    fput(fh, ind + "    *  the modules it calls re-enter this block.")
+    fput(fh, ind + "    forvalues _pk_i = 1/" + _mq("_pk_n") + " {")
+    fput(fh, ind + "        if " + q + dol + "{mdf_ds_here_" + _mq("_pk_i") + "}" + q + " != " + q + "1" + q + " global dta_cleaned_" + _mq("_pk_i") + " " + q + q)
+    fput(fh, ind + "    }")
     fput(fh, ind + "}")
     fput(fh, ind + "global target_dta  " + q + dol + "{target_dta_1}"  + q)
     fput(fh, ind + "global dta_labeled " + q + dol + "{dta_labeled_1}" + q)
     fput(fh, "")
+}
+
+void sa_part_folders(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    real scalar _k, _nb
+    string scalar bs, procfile
+    string colvector deps
+
+    bs = char(92)
+    procfile = pname + "_Processing.do"
+    pragma unused _nb
+    pragma unused deps
+    pragma unused procfile
 
     //  ── Dates ──────────────────────────────────────────────────────────────
     fput(fh, ind + "local _sa_dt = daily(" + q + bt + "c(current_date)" + ap + q + ", " + q + "DMY" + q + ")")
@@ -1439,11 +1763,25 @@ void standalone_context(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "global LAST_RUN_DATE   " + q + dol + "today" + q)
     fput(fh, "")
 
-    //  ── Output: one folder, always beside this file ───────────────────────
-    fput(fh, ind + "global mdf_out " + bt + q + bt + "_selfdir" + ap + "/MDF_Output" + q + ap)
-    fput(fh, ind + "cap mkdir " + q + dol + "mdf_out" + q)
+    //  ── Output ─────────────────────────────────────────────────────────────
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " {")
+    fput(fh, ind + "    *  One folder, always beside this file.")
+    fput(fh, ind + "    global mdf_out " + bt + q + bt + "_selfdir" + ap + "/MDF_Output" + q + ap)
+    fput(fh, ind + "    cap mkdir " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "    global clean_dir            " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "}")
+    fput(fh, ind + "else {")
+    fput(fh, ind + "    *  The package receives only the cleaned dataset, in 04_Cleaned Data/.")
+    fput(fh, ind + "    *  The dated working copy the workflow saves on the way goes to Stata's")
+    fput(fh, ind + "    *  temp folder.")
+    fput(fh, ind + "    local _pk_tmp = subinstr(" + bt + q + bt + "c(tmpdir)" + ap + q + ap + ", " + q + bs + q + ", " + q + "/" + q + ", .)")
+    fput(fh, ind + "    if substr(" + _cq("_pk_tmp") + ", -1, 1) == " + q + "/" + q + " local _pk_tmp = substr(" + _cq("_pk_tmp") + ", 1, strlen(" + _cq("_pk_tmp") + ") - 1)")
+    fput(fh, ind + "    global mdf_out " + bt + q + bt + "_pk_tmp" + ap + "/mdf_package_work" + q + ap)
+    fput(fh, ind + "    cap mkdir " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "    global clean_dir " + bt + q + bt + "_sa_pkg" + ap + "/04_Cleaned Data" + q + ap)
+    fput(fh, ind + "    cap mkdir " + q + dol + "clean_dir" + q)
+    fput(fh, ind + "}")
     fput(fh, ind + "global hfc_run_dir          " + q + dol + "mdf_out" + q)
-    fput(fh, ind + "global clean_dir            " + q + dol + "mdf_out" + q)
     fput(fh, ind + "global hfc_dir              " + q + dol + "mdf_out" + q)
     fput(fh, ind + "global hfc_keys_dir         " + q + dol + "mdf_out/KEYS" + q)
     fput(fh, ind + "global hfc_keys_hfc_dir     " + q + dol + "hfc_keys_dir/01_HFC_Keys" + q)
@@ -1464,42 +1802,80 @@ void standalone_context(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "global raw_data_dir         " + _cq("_sa_datadir"))
     fput(fh, ind + "global hfc_rawdata_dir      " + _cq("_sa_datadir"))
     fput(fh, ind + "global hfc_raw_snapshot_dir " + _cq("_sa_datadir"))
-    fput(fh, ind + "global dofiles_dir          " + _cq("_selfdir"))
-    fput(fh, ind + "global processing_dir       " + _cq("_selfdir"))
-    fput(fh, ind + "global processing_data_dir  " + _cq("_sa_datadir"))
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " {")
+    fput(fh, ind + "    global dofiles_dir          " + _cq("_selfdir"))
+    fput(fh, ind + "    global processing_dir       " + _cq("_selfdir"))
+    fput(fh, ind + "    global processing_data_dir  " + _cq("_sa_datadir"))
+    fput(fh, ind + "    global surv_inst_dir        " + _cq("_selfdir"))
+    fput(fh, ind + "}")
+    fput(fh, ind + "else {")
+    fput(fh, ind + "    global processing_dir       " + bt + q + bt + "_sa_pkg" + ap + "/03_Processing Files" + q + ap)
+    fput(fh, ind + "    global processing_data_dir  " + q + dol + "processing_dir/03_Data" + q)
+    fput(fh, ind + "    global dofiles_dir          " + q + dol + "processing_dir" + q)
+    fput(fh, ind + "    global surv_inst_dir        " + _cq("_sa_pkg"))
+    fput(fh, ind + "}")
+    fput(fh, ind + "*  The modules sit beside the Processing DO, or in a 01_Do Files/")
+    fput(fh, ind + "*  subfolder of it (the v11 arrangement).")
+    fput(fh, ind + "local _sa_ok 0")
+    fput(fh, ind + "mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(st_global(" + q + "dofiles_dir" + q + ") + " + q + "/01_Do Files" + q + ")))")
+    fput(fh, ind + "if " + _mq("_sa_ok") + " == 1 global dofiles_dir " + q + dol + "dofiles_dir/01_Do Files" + q)
     fput(fh, ind + "*  The framework's own already-bootstrapped flag. Every module tests it,")
     fput(fh, ind + "*  and so does the secondary guard, which would otherwise reload another")
-    fput(fh, ind + "*  project's 00_Directory.do over the context just built here.")
-    fput(fh, ind + "global hfc_dofiles_dir      " + _cq("_selfdir"))
+    fput(fh, ind + "*  project's directory file over the context just built here.")
+    fput(fh, ind + "global hfc_dofiles_dir      " + q + dol + "dofiles_dir" + q)
     fput(fh, "")
 
-    //  ── CAPI material, if any travelled with the file ─────────────────────
-    fput(fh, ind + "global surv_inst_dir " + _cq("_selfdir"))
-    fput(fh, ind + "global capi_dir " + _cq("_selfdir"))
-    fput(fh, ind + "foreach _sa_c in " + q + "02_CAPI" + q + " " + q + "CAPI" + q + " " + q + "01_Survey_Instruments/02_CAPI" + q + " {")
-    fput(fh, ind + "    local _sa_ok 0")
-    fput(fh, ind + "    mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(" + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ")))")
-    fput(fh, ind + "    if " + _mq("_sa_ok") + " == 1 {")
-    fput(fh, ind + "        global capi_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ap)
+    //  ── CAPI material ──────────────────────────────────────────────────────
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " {")
+    fput(fh, ind + "    global capi_dir " + _cq("_selfdir"))
+    fput(fh, ind + "    foreach _sa_c in " + q + "02_CAPI" + q + " " + q + "CAPI" + q + " " + q + "01_Survey_Instruments/02_CAPI" + q + " {")
+    fput(fh, ind + "        local _sa_ok 0")
+    fput(fh, ind + "        mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(" + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ")))")
+    fput(fh, ind + "        if " + _mq("_sa_ok") + " == 1 {")
+    fput(fh, ind + "            global capi_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ap)
+    fput(fh, ind + "        }")
     fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+    fput(fh, ind + "else {")
+    fput(fh, ind + "    global capi_dir  " + bt + q + bt + "_sa_pkg" + ap + "/01_CAPI & Questionnaire" + q + ap)
+    fput(fh, ind + "    global quest_dir " + q + dol + "capi_dir" + q)
     fput(fh, ind + "}")
     fput(fh, "")
 
-    //  ── Translation material, if any travelled with the file ──────────────
-    fput(fh, ind + "global translation_dir " + q + dol + "mdf_out/Translation" + q)
-    fput(fh, ind + "foreach _sa_c in " + q + "05_Translation" + q + " " + q + "Translation" + q + " {")
-    fput(fh, ind + "    local _sa_ok 0")
-    fput(fh, ind + "    mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(" + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ")))")
-    fput(fh, ind + "    if " + _mq("_sa_ok") + " == 1 {")
-    fput(fh, ind + "        global translation_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ap)
+    //  ── Translation material ───────────────────────────────────────────────
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " {")
+    fput(fh, ind + "    global translation_dir " + q + dol + "mdf_out/Translation" + q)
+    fput(fh, ind + "    foreach _sa_c in " + q + "02_Translation" + q + " " + q + "05_Translation" + q + " " + q + "Translation" + q + " {")
+    fput(fh, ind + "        local _sa_ok 0")
+    fput(fh, ind + "        mata: st_local(" + q + "_sa_ok" + q + ", strofreal(direxists(" + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ")))")
+    fput(fh, ind + "        if " + _mq("_sa_ok") + " == 1 {")
+    fput(fh, ind + "            global translation_dir " + bt + q + bt + "_selfdir" + ap + "/" + bt + "_sa_c" + ap + q + ap)
+    fput(fh, ind + "        }")
     fput(fh, ind + "    }")
     fput(fh, ind + "}")
+    fput(fh, ind + "else global translation_dir " + q + dol + "processing_dir/02_Translation" + q)
     fput(fh, ind + "global trans_exported_dir   " + q + dol + "translation_dir/01_Exported" + q)
     fput(fh, ind + "global trans_translated_dir " + q + dol + "translation_dir/02_Translated" + q)
     fput(fh, ind + "cap mkdir " + q + dol + "translation_dir" + q)
     fput(fh, ind + "cap mkdir " + q + dol + "trans_exported_dir" + q)
     fput(fh, ind + "cap mkdir " + q + dol + "trans_translated_dir" + q)
     fput(fh, "")
+}
+
+void sa_part_config(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    real scalar _k, _nb
+    string scalar bs, procfile
+    string colvector deps
+
+    bs = char(92)
+    procfile = pname + "_Processing.do"
+    pragma unused _nb
+    pragma unused deps
+    pragma unused procfile
 
     //  ── Survey configuration, as this file was generated with it ──────────
     fput(fh, ind + "global sample_size  " + st_global("sample_size"))
@@ -1547,10 +1923,196 @@ void standalone_context(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "global import_fingerprint   0")
     fput(fh, ind + "global hfc_postfield_active 0")
     fput(fh, "")
-    fput(fh, ind + "forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
+}
+
+void sa_part_package(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    real scalar _k, _nb
+    string scalar bs, procfile
+    string colvector deps
+
+    bs = char(92)
+    procfile = pname + "_Processing.do"
+    pragma unused _nb
+    pragma unused deps
+    pragma unused procfile
+
+    //  ── Package: what reproducing the cleaned dataset needs ────────────────
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " == " + q + "1" + q + " {")
+    fput(fh, ind + "    *  Rebuilding never sends text to a translator, and a per-dataset")
+    fput(fh, ind + "    *  package has no second dataset to merge with.")
+    fput(fh, ind + "    global exportopenended 0")
+    fput(fh, ind + "    global merge_required  0")
+    fput(fh, "")
+    fput(fh, ind + "    *  ── The SurveyCTO form: the one workbook with survey + choices sheets ─")
+    fput(fh, ind + "    *  The questionnaire shares this folder, possibly as a spreadsheet too,")
+    fput(fh, ind + "    *  so a form is recognised by its sheets rather than by being an .xlsx.")
+    fput(fh, ind + "    local _pk_form " + q + q)
+    fput(fh, ind + "    local _pk_nf 0")
+    fput(fh, ind + "    local _pk_xl " + q + q)
+    fput(fh, ind + "    cap local _pk_xl : dir " + q + dol + "capi_dir" + q + " files " + q + "*.xlsx" + q + ", respectcase")
+    fput(fh, ind + "    local _pk_xl : list sort _pk_xl")
+    fput(fh, ind + "    foreach _pk_f of local _pk_xl {")
+    fput(fh, ind + "        if substr(" + _cq("_pk_f") + ", 1, 1) == " + q + "~" + q + " continue")
+    fput(fh, ind + "        cap qui import excel using " + bt + q + dol + "capi_dir/" + bt + "_pk_f" + ap + q + ap + ", describe")
+    fput(fh, ind + "        if _rc continue")
+    fput(fh, ind + "        local _pk_s 0")
+    fput(fh, ind + "        local _pk_c 0")
+    fput(fh, ind + "        local _pk_nw = r(N_worksheet)")
+    fput(fh, ind + "        forvalues _pk_w = 1/" + _mq("_pk_nw") + " {")
+    fput(fh, ind + "            local _pk_wn = lower(strtrim(" + bt + q + bt + "r(worksheet_" + bt + "_pk_w" + ap + ")" + ap + q + ap + "))")
+    fput(fh, ind + "            if " + _cq("_pk_wn") + " == " + q + "survey" + q + "  local _pk_s 1")
+    fput(fh, ind + "            if " + _cq("_pk_wn") + " == " + q + "choices" + q + " local _pk_c 1")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        if " + _mq("_pk_s") + " == 1 & " + _mq("_pk_c") + " == 1 {")
+    fput(fh, ind + "            local _pk_form " + _cq("_pk_f"))
+    fput(fh, ind + "            local _pk_nf = " + _mq("_pk_nf") + " + 1")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    if " + _mq("_pk_nf") + " > 1 {")
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as error " + q + "  DELIVERABLES PACKAGE  —  MORE THAN ONE SURVEYCTO FORM" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as txt   " + q + "  01_CAPI & Questionnaire/ holds " + q + " " + _mq("_pk_nf") + " " + q + " SurveyCTO forms. The package" + q)
+    fput(fh, ind + "        di as txt   " + q + "  carries exactly one, and which one labelled the data cannot be" + q)
+    fput(fh, ind + "        di as txt   " + q + "  guessed. Remove the extra form(s) and run again:" + q)
+    fput(fh, ind + "        di as result " + q + "    " + q + " " + q + dol + "capi_dir" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        exit 198")
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    if " + _mq("_pk_nf") + " == 0 & " + q + dol + "run_labeling" + q + " == " + q + "1" + q + " {")
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as error " + q + "  DELIVERABLES PACKAGE  —  THE SURVEYCTO FORM IS MISSING" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        di as txt   " + q + "  The cleaned dataset was labelled from a SurveyCTO form, and none is" + q)
+    fput(fh, ind + "        di as txt   " + q + "  in 01_CAPI & Questionnaire/. Without it the rebuild would carry no" + q)
+    fput(fh, ind + "        di as txt   " + q + "  value labels and would not match. Nothing has been written." + q)
+    fput(fh, ind + "        di as result " + q + "    " + q + " " + q + dol + "capi_dir" + q)
+    fput(fh, ind + "        di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "        exit 198")
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    if " + _mq("_pk_nf") + " == 1 {")
+    fput(fh, ind + "        global capi_override " + _cq("_pk_form"))
+    fput(fh, ind + "        forvalues _pk_i = 1/" + dol + "actual_n_dta {")
+    fput(fh, ind + "            if " + q + dol + "{mdf_ds_here_" + _mq("_pk_i") + "}" + q + " == " + q + "1" + q + " global capi_override_" + _mq("_pk_i") + " " + _cq("_pk_form"))
+    fput(fh, ind + "        }")
+    fput(fh, ind + "    }")
+    fput(fh, "")
+
+    //  ── Package: the survey commands the rebuild uses ───────────────────
+    //  A client machine has no reason to carry them. Without odksplit the
+    //  labels are missing, without inputcorrection the translations are, and
+    //  the rebuild would differ from the original with nothing said. So each
+    //  is installed from the source Master uses when it is absent, and if that
+    //  cannot be done the run stops before a dataset is written. Other survey
+    //  commands the cleaning code names are installed when absent too; they
+    //  are not fatal here, because a missing one stops the run by itself.
+    //  Done once per package per session.
+    deps = _mdf_dep_names()
+    fput(fh, ind + "    if " + q + dol + "mdf_pkg_deps_ok" + q + " != " + _cq("_sa_pkg") + " {")
+    fput(fh, ind + "        local _pk_need " + q + q)
+    fput(fh, ind + "        if " + q + dol + "run_labeling" + q + " == " + q + "1" + q + " local _pk_need " + q + "odksplit" + q)
+    fput(fh, ind + "        if " + q + dol + "inputcorrection" + q + " == " + q + "1" + q + " {")
+    fput(fh, ind + "            local _pk_tx " + q + q)
+    fput(fh, ind + "            cap local _pk_tx : dir " + q + dol + "trans_translated_dir" + q + " files " + q + "*.xlsx" + q)
+    fput(fh, ind + "            local _pk_td " + q + q)
+    fput(fh, ind + "            cap local _pk_td : dir " + q + dol + "trans_translated_dir" + q + " dirs " + q + "*" + q)
+    fput(fh, ind + "            foreach _pk_d of local _pk_td {")
+    fput(fh, ind + "                local _pk_t2 " + q + q)
+    fput(fh, ind + "                cap local _pk_t2 : dir " + bt + q + dol + "trans_translated_dir/" + bt + "_pk_d" + ap + q + ap + " files " + q + "*.xlsx" + q)
+    fput(fh, ind + "                local _pk_tx " + bt + q + bt + "_pk_tx" + ap + " " + bt + "_pk_t2" + ap + q + ap)
+    fput(fh, ind + "            }")
+    //  Counted, not compared with "": the list is built by concatenation and
+    //  is a lone space when there is nothing in it.
+    fput(fh, ind + "            local _pk_ntx : word count " + _mq("_pk_tx"))
+    fput(fh, ind + "            if " + _mq("_pk_ntx") + " > 0 local _pk_need " + q + bt + "_pk_need" + ap + " inputcorrection" + q)
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        foreach _pk_c of local _pk_need {")
+    fput(fh, ind + "            cap which " + _mq("_pk_c"))
+    fput(fh, ind + "            if _rc {")
+    fput(fh, ind + "                di as txt " + q + "  " + _mq("_pk_c") + " is not installed on this machine; installing it..." + q)
+    fput(fh, ind + "                if " + q + _mq("_pk_c") + q + " == " + q + "odksplit" + q + " cap noi " + _mdf_dep_install("odksplit"))
+    fput(fh, ind + "                if " + q + _mq("_pk_c") + q + " == " + q + "inputcorrection" + q + " cap noi " + _mdf_dep_install("inputcorrection"))
+    fput(fh, ind + "                cap which " + _mq("_pk_c"))
+    fput(fh, ind + "                if _rc {")
+    fput(fh, ind + "                    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "                    di as error " + q + "  DELIVERABLES PACKAGE  —  " + _mq("_pk_c") + " IS NOT AVAILABLE" + q)
+    fput(fh, ind + "                    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "                    di as txt   " + q + "  The cleaned dataset was produced with the Stata command " + _mq("_pk_c") + "," + q)
+    fput(fh, ind + "                    di as txt   " + q + "  which is not installed here and could not be installed (no" + q)
+    fput(fh, ind + "                    di as txt   " + q + "  connection?). Without it the rebuild would not match, so nothing" + q)
+    fput(fh, ind + "                    di as txt   " + q + "  has been written. Install it, then run this file again:" + q)
+    fput(fh, ind + "                    if " + q + _mq("_pk_c") + q + " == " + q + "odksplit" + q + " di as result " + q + "    " + _mdf_dep_install("odksplit") + q)
+    fput(fh, ind + "                    if " + q + _mq("_pk_c") + q + " == " + q + "inputcorrection" + q + " di as result " + bt + q + "    " + _mdf_dep_install("inputcorrection") + q + ap)
+    fput(fh, ind + "                    di as error " + q + "=====================================================================" + q)
+    fput(fh, ind + "                    exit 199")
+    fput(fh, ind + "                }")
+    fput(fh, ind + "            }")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        *  The rest: only what the Processing DO actually names.")
+    fput(fh, ind + "        local _pk_src " + bt + q + dol + "processing_dir/" + procfile + q + ap)
+    fput(fh, ind + "        local _pk_want " + q + q)
+    //  Read in Mata: a line held in a Stata macro would have the macro
+    //  references in the analyst's own code expanded on use, and one stray
+    //  quote there would stop the rebuild with a syntax error.
+    fput(fh, ind + "        cap confirm file " + _cq("_pk_src"))
+    fput(fh, ind + "        if !_rc {")
+    fput(fh, ind + "            mata: _mdf_pk_L = strtrim(cat(st_local(" + q + "_pk_src" + q + ")))")
+    //  Comments do not count, and nor does this preflight's own code, which
+    //  names every command it can install (its locals all start _pk_).
+    fput(fh, ind + "            mata: _mdf_pk_L = select(_mdf_pk_L, (substr(_mdf_pk_L, 1, 1) :!= " + q + "*" + q + ") :& (strpos(_mdf_pk_L, " + q + "_pk_" + q + ") :== 0))")
+    //  exportopenended is left out: it is also the name of a Section 0 switch
+    //  every Processing DO reads, and exporting is off in a package anyway.
+    _dl = ""
+    for (_k = 3; _k <= rows(deps); _k++) {
+        if (deps[_k] != "exportopenended") _dl = _dl + " " + deps[_k]
+    }
+    fput(fh, ind + "            foreach _pk_c in" + _dl + " {")
+    fput(fh, ind + "                local _pk_h 0")
+    fput(fh, ind + "                mata: st_local(" + q + "_pk_h" + q + ", strofreal(sum(strpos(_mdf_pk_L, st_local(" + q + "_pk_c" + q + ")) :> 0) > 0))")
+    fput(fh, ind + "                if " + _mq("_pk_h") + " == 1 local _pk_want " + q + bt + "_pk_want" + ap + " " + bt + "_pk_c" + ap + q)
+    fput(fh, ind + "            }")
+    fput(fh, ind + "            cap mata: mata drop _mdf_pk_L")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        foreach _pk_c of local _pk_want {")
+    fput(fh, ind + "            cap which " + _mq("_pk_c"))
+    fput(fh, ind + "            if _rc {")
+    fput(fh, ind + "                di as txt " + q + "  " + _mq("_pk_c") + " is used by the cleaning code and is not installed; installing it..." + q)
+    for (_k = 3; _k <= rows(deps); _k++) {
+        fput(fh, ind + "                if " + q + _mq("_pk_c") + q + " == " + q + deps[_k] + q + " cap noi " + _mdf_dep_install(deps[_k]))
+    }
+    fput(fh, ind + "                cap which " + _mq("_pk_c"))
+    fput(fh, ind + "                if _rc di as error " + q + "  WARNING: " + _mq("_pk_c") + " could not be installed. If the cleaning needs it, the run will stop there." + q)
+    fput(fh, ind + "            }")
+    fput(fh, ind + "        }")
+    fput(fh, ind + "        global mdf_pkg_deps_ok " + _cq("_sa_pkg"))
+    fput(fh, ind + "    }")
+    fput(fh, ind + "}")
+    fput(fh, "")
+
+    fput(fh, ind + "forvalues _sa_i = 1/" + dol + "actual_n_dta {")
     fput(fh, ind + "    global pre_keys_" + _mq("_sa_i") + " " + bt + q + dol + "hfc_keys_master_dir/" + dol + "{auto_dsname_" + bt + "_sa_i" + ap + "}_KEYS_" + dol + "LAST_RUN_DATE.dta" + q + ap)
     fput(fh, ind + "}")
     fput(fh, "")
+}
+
+void sa_part_tail(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    real scalar _k, _nb
+    string scalar bs, procfile
+    string colvector deps
+
+    bs = char(92)
+    procfile = pname + "_Processing.do"
+    pragma unused _nb
+    pragma unused deps
+    pragma unused procfile
 
     //  ── Helper programs, in case the package is not installed ─────────────
     fput(fh, ind + "*  ── Helpers, for a machine with no framework installed ─────────────")
@@ -1635,26 +2197,54 @@ void standalone_context(real scalar fh, string scalar q, string scalar bt,
     }
 
     //  ── Announce, loudly and specifically ─────────────────────────────────
-    fput(fh, ind + "di as result " + q + "=====================================================================" + q)
-    fput(fh, ind + "di as result " + q + "  STANDALONE MODE  —  running from this file's own folder" + q)
-    fput(fh, ind + "di as result " + q + "=====================================================================" + q)
-    fput(fh, ind + "di as txt    " + q + "  No Master DO File project was found above this file, so it is" + q)
-    fput(fh, ind + "di as txt    " + q + "  running on what sits beside it. CONFIRM this is the data you" + q)
-    fput(fh, ind + "di as txt    " + q + "  meant:" + q)
-    fput(fh, ind + "di as txt    " + q + "    root   : " + q + " " + _cq("_selfdir"))
-    fput(fh, ind + "di as txt    " + q + "    data   : " + q + " " + _cq("_sa_datadir"))
-    fput(fh, ind + "forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
-    fput(fh, ind + "    di as result " + q + "    DS" + bt + "_sa_i" + ap + "    : " + q + " " + q + dol + "{target_dta_" + bt + "_sa_i" + ap + "}" + q)
+    fput(fh, ind + "if " + q + dol + "mdf_package" + q + " == " + q + "1" + q + " {")
+    fput(fh, ind + "    di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as result " + q + "  DELIVERABLES PACKAGE  —  rebuilding the cleaned dataset here" + q)
+    fput(fh, ind + "    di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as txt    " + q + "    package  : " + q + " " + _cq("_sa_pkg"))
+    fput(fh, ind + "    di as txt    " + q + "    raw data : " + q + " " + _cq("_sa_datadir"))
+    fput(fh, ind + "    forvalues _sa_i = 1/" + dol + "actual_n_dta {")
+    fput(fh, ind + "        if " + q + dol + "{mdf_ds_here_" + _mq("_sa_i") + "}" + q + " == " + q + "1" + q + " di as result " + q + "    DS" + bt + "_sa_i" + ap + "      : " + q + " " + bt + q + dol + "{auto_dsname_" + bt + "_sa_i" + ap + "}" + q + ap)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    di as txt    " + q + "    form     : " + q + " " + _cq("_pk_form"))
+    fput(fh, ind + "    di as txt    " + q + "    output   : " + q + " " + q + dol + "clean_dir" + q)
+    fput(fh, ind + "    di as result " + q + "=====================================================================" + q)
     fput(fh, ind + "}")
-    fput(fh, ind + "di as txt    " + q + "    output : " + q + " " + q + dol + "mdf_out" + q)
-    fput(fh, ind + "if " + _mq("_sel_run") + " == 1 {")
-    fput(fh, ind + "    di as error " + q + "  Ctrl+A / Ctrl+D gives Stata no path for this file, so the folder" + q)
-    fput(fh, ind + "    di as error " + q + "  above is Stata's WORKING DIRECTORY, not necessarily this file's." + q)
-    fput(fh, ind + "    di as error " + q + "  If it is wrong: File > Change working directory, or launch Stata" + q)
-    fput(fh, ind + "    di as error " + q + "  by double-clicking this file." + q)
+    fput(fh, ind + "else {")
+    fput(fh, ind + "    di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as result " + q + "  STANDALONE MODE  —  running from this file's own folder" + q)
+    fput(fh, ind + "    di as result " + q + "=====================================================================" + q)
+    fput(fh, ind + "    di as txt    " + q + "  No Master DO File project was found above this file, so it is" + q)
+    fput(fh, ind + "    di as txt    " + q + "  running on what sits beside it. CONFIRM this is the data you" + q)
+    fput(fh, ind + "    di as txt    " + q + "  meant:" + q)
+    fput(fh, ind + "    di as txt    " + q + "    root   : " + q + " " + _cq("_selfdir"))
+    fput(fh, ind + "    di as txt    " + q + "    data   : " + q + " " + _cq("_sa_datadir"))
+    fput(fh, ind + "    forvalues _sa_i = 1/" + _mq("_sa_k") + " {")
+    fput(fh, ind + "        di as result " + q + "    DS" + bt + "_sa_i" + ap + "    : " + q + " " + q + dol + "{target_dta_" + bt + "_sa_i" + ap + "}" + q)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    di as txt    " + q + "    output : " + q + " " + q + dol + "mdf_out" + q)
+    fput(fh, ind + "    if " + _mq("_sel_run") + " == 1 {")
+    fput(fh, ind + "        di as error " + q + "  Ctrl+A / Ctrl+D gives Stata no path for this file, so the folder" + q)
+    fput(fh, ind + "        di as error " + q + "  above is Stata's WORKING DIRECTORY, not necessarily this file's." + q)
+    fput(fh, ind + "        di as error " + q + "  If it is wrong: File > Change working directory, or launch Stata" + q)
+    fput(fh, ind + "        di as error " + q + "  by double-clicking this file." + q)
+    fput(fh, ind + "    }")
+    fput(fh, ind + "    di as result " + q + "=====================================================================" + q)
     fput(fh, ind + "}")
-    fput(fh, ind + "di as result " + q + "=====================================================================" + q)
     fput(fh, ind + "local _boot " + _cq("_selfdir"))
+}
+
+void standalone_context(real scalar fh, string scalar q, string scalar bt,
+                        string scalar ap, string scalar dol,
+                        string scalar pname, string scalar nds,
+                        string scalar needs, string scalar ind)
+{
+    sa_part_checks(fh, q, bt, ap, dol, pname, nds, needs, ind)
+    sa_part_identity(fh, q, bt, ap, dol, pname, nds, needs, ind)
+    sa_part_folders(fh, q, bt, ap, dol, pname, nds, needs, ind)
+    sa_part_config(fh, q, bt, ap, dol, pname, nds, needs, ind)
+    sa_part_package(fh, q, bt, ap, dol, pname, nds, needs, ind)
+    sa_part_tail(fh, q, bt, ap, dol, pname, nds, needs, ind)
 }
 
 //  `nds'   datasets this file was generated for; standalone mode refuses to
@@ -1675,6 +2265,7 @@ void module_header(
     fput(fh, "*  session must resolve itself afresh rather than inherit the first one's.")
     fput(fh, "if " + q + dol + "mdf_standalone" + q + " == " + q + "1" + q + " local _boot " + q + q)
     fput(fh, "global mdf_standalone 0")
+    fput(fh, "global mdf_package 0")
     fput(fh, "if " + bt + q + bt + "_boot" + ap + q + ap + " == " + q + q + " {")
     fput(fh, "")
     fput(fh, "    local _p " + bt + q + bt + "c(do_current)" + ap + q + ap)
@@ -1686,6 +2277,9 @@ void module_header(
     fput(fh, "        local _cf " + bt + q + bt + "c(filename)" + ap + q + ap)
     fput(fh, "        if lower(substr(" + bt + q + bt + "_cf" + ap + q + ap + ", -3, 3)) == " + q + ".do" + q + " local _p " + bt + q + bt + "_cf" + ap + q + ap)
     fput(fh, "    }")
+    fput(fh, "    *  Measured in Stata 17: c(do_current) is empty for every run, from the")
+    fput(fh, "    *  Do button, from Ctrl+A / Ctrl+D and from a nested -do-. The working")
+    fput(fh, "    *  directory is therefore where this file starts looking (ADR-059).")
     fput(fh, "    if " + bt + q + bt + "_p" + ap + q + ap + " == " + q + q + " local _p " + bt + q + bt + "c(pwd)" + ap + "/." + q + ap)
     fput(fh, "    local _p = subinstr(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + bs + q + ", " + q + "/" + q + ", .)")
     fput(fh, "")
@@ -1705,14 +2299,35 @@ void module_header(
     fput(fh, "    *  `_p'.")
     fput(fh, "    local _selfdir = substr(" + bt + q + bt + "_p" + ap + q + ap + ", 1, strrpos(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + "/" + q + ") - 1)")
     fput(fh, "")
+    //  ── Package probe (ADR-059) ────────────────────────────────────────────
+    fput(fh, "    *  ── A Deliverables package around this file? ──────────────────────")
+    fput(fh, "    *  A package holds 02_Import & Raw files/; this file sits in its")
+    fput(fh, "    *  03_Processing Files/ or 03_Processing Files/01_Do Files/. Looked for")
+    fput(fh, "    *  BEFORE the project walk, so a package built inside a project")
+    fput(fh, "    *  rebuilds inside the package instead of re-running the project.")
+    fput(fh, "    local _sa_pkg " + q + q)
+    fput(fh, "    local _pk_try " + _cq("_selfdir"))
+    fput(fh, "    forvalues _pk_i = 1/3 {")
+    fput(fh, "        if " + _cq("_sa_pkg") + " == " + q + q + " & " + _cq("_pk_try") + " != " + q + q + " {")
+    fput(fh, "            local _pk_ok 0")
+    fput(fh, "            mata: st_local(" + q + "_pk_ok" + q + ", strofreal(direxists(" + q + bt + "_pk_try" + ap + "/02_Import & Raw files" + q + ")))")
+    fput(fh, "            if " + _mq("_pk_ok") + " == 1 local _sa_pkg " + _cq("_pk_try"))
+    fput(fh, "            local _pk_cut = strrpos(" + _cq("_pk_try") + ", " + q + "/" + q + ")")
+    fput(fh, "            if " + _mq("_pk_cut") + " > 1 local _pk_try = substr(" + _cq("_pk_try") + ", 1, " + _mq("_pk_cut") + " - 1)")
+    fput(fh, "            else local _pk_try " + q + q)
+    fput(fh, "        }")
+    fput(fh, "    }")
+    fput(fh, "")
     fput(fh, "    local _root " + q + q)
-    fput(fh, "    forvalues _i = 1/12 {")
-    fput(fh, "        local _p = substr(" + bt + q + bt + "_p" + ap + q + ap + ", 1, strrpos(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + "/" + q + ") - 1)")
-    fput(fh, "        if " + bt + q + bt + "_p" + ap + q + ap + " == " + q + q + " continue, break")
-    fput(fh, "        cap confirm file " + bt + q + bt + "_p" + ap + "/.hfc_root" + q + ap)
-    fput(fh, "        if !_rc {")
-    fput(fh, "            local _root " + bt + q + bt + "_p" + ap + q + ap)
-    fput(fh, "            continue, break")
+    fput(fh, "    if " + _cq("_sa_pkg") + " == " + q + q + " {")
+    fput(fh, "        forvalues _i = 1/12 {")
+    fput(fh, "            local _p = substr(" + bt + q + bt + "_p" + ap + q + ap + ", 1, strrpos(" + bt + q + bt + "_p" + ap + q + ap + ", " + q + "/" + q + ") - 1)")
+    fput(fh, "            if " + bt + q + bt + "_p" + ap + q + ap + " == " + q + q + " continue, break")
+    fput(fh, "            cap confirm file " + bt + q + bt + "_p" + ap + "/.hfc_root" + q + ap)
+    fput(fh, "            if !_rc {")
+    fput(fh, "                local _root " + bt + q + bt + "_p" + ap + q + ap)
+    fput(fh, "                continue, break")
+    fput(fh, "            }")
     fput(fh, "        }")
     fput(fh, "    }")
     fput(fh, "")
@@ -1723,18 +2338,22 @@ void module_header(
     fput(fh, "    *  sits. Discovery runs only on this branch, so a file inside a real")
     fput(fh, "    *  project never reaches it.")
     fput(fh, "    if " + bt + q + bt + "_root" + ap + q + ap + " == " + q + q + " {")
-    standalone_discover(fh, q, bt, ap, dol, "        ");
-    fput(fh, "        *  No project above this file, so run it where it stands. An empty")
-    fput(fh, "        *  folder then has to SAY so rather than quietly adopt the cached")
-    fput(fh, "        *  root of a project this file is no longer part of.")
-    fput(fh, "        if " + bt + "_sel_run" + ap + " == 0 global mdf_standalone 1")
-    fput(fh, "        *  Measured in Stata 17, not assumed: Ctrl+A / Ctrl+D leaves")
-    fput(fh, "        *  c(do_current) EMPTY rather than naming the STD*.tmp file the rung")
-    fput(fh, "        *  above looks for, so a selection run reaches here with _sel_run 0 and")
-    fput(fh, "        *  c(pwd) already standing in for this file's folder. Where the tmp")
-    fput(fh, "        *  name IS reported, the working directory is weaker evidence — take it")
-    fput(fh, "        *  only when it actually holds data, and leave the cache its chance.")
-    fput(fh, "        if " + bt + "_sel_run" + ap + " == 1 & " + bt + "_sa_k" + ap + " > 0 global mdf_standalone 1")
+    fput(fh, "        if " + _cq("_sa_pkg") + " != " + q + q + " {")
+    package_discover(fh, q, bt, ap, "            ")
+    fput(fh, "            global mdf_standalone 1")
+    fput(fh, "            global mdf_package 1")
+    fput(fh, "        }")
+    fput(fh, "        else {")
+    standalone_discover(fh, q, bt, ap, dol, "            ");
+    fput(fh, "            *  No project above this file, so run it where it stands. An empty")
+    fput(fh, "            *  folder then has to SAY so rather than quietly adopt the cached")
+    fput(fh, "            *  root of a project this file is no longer part of.")
+    fput(fh, "            if " + bt + "_sel_run" + ap + " == 0 global mdf_standalone 1")
+    fput(fh, "            *  Where a selection run IS reported by a temp-file name, the")
+    fput(fh, "            *  working directory is weaker evidence — take it only when it")
+    fput(fh, "            *  actually holds data, and leave the cache its chance.")
+    fput(fh, "            if " + bt + "_sel_run" + ap + " == 1 & " + bt + "_sa_k" + ap + " > 0 global mdf_standalone 1")
+    fput(fh, "        }")
     fput(fh, "    }")
     fput(fh, "")
     fput(fh, "    if " + bt + q + bt + "_root" + ap + q + ap + " == " + q + q + " & " + q + dol + "mdf_standalone" + q + " != " + q + "1" + q + " {")
@@ -1772,11 +2391,12 @@ void module_header(
     fput(fh, "        di as error " + q + "=======================================================================" + q)
     fput(fh, "    }")
     fput(fh, "    di as result " + q + "Project root → " + q + " " + bt + q + bt + "_root" + ap + q + ap)
-    fput(fh, "    local _boot " + bt + q + bt + "_root" + ap + "/04_DO Files" + q + ap)
+    fput(fh, "    local _boot " + _cq("_root"))
     fput(fh, "")
-    fput(fh, "    *  A managed project's globals live in its 00_Directory.do, which the")
-    fput(fh, "    *  package knows how to load. Standalone mode never gets here: it built")
-    fput(fh, "    *  its own context above and must not need the package installed.")
+    fput(fh, "    *  A managed project's globals live in its directory file, which the")
+    fput(fh, "    *  package knows how to find in either layout. Standalone mode never")
+    fput(fh, "    *  gets here: it built its own context above and must not need the")
+    fput(fh, "    *  package installed.")
     fput(fh, "    cap which mdf_bootstrap")
     fput(fh, "    if _rc {")
     fput(fh, "        di as error " + q + "The Master DO File framework is not installed on this machine." + q)
@@ -1809,15 +2429,20 @@ void write_mod_oe_apply(real scalar fh, string scalar q, string scalar bt, strin
     fput(fh, indent + "    *  ignoring them would quietly discard work already paid for.")
     fput(fh, indent + "    local _ds_folder " + q + bt + "_tfold" + ap + q)
     fput(fh, indent + "    local _ds_dir    " + q + dol + "trans_translated_dir/" + bt + "_ds_folder" + ap + q)
-    fput(fh, indent + "    cap mkdir " + q + bt + "_ds_dir" + ap + q)
+    //  A Deliverables package carries one dataset, so its returned files sit
+    //  directly in 02_Translated/: the dataset's name twice on the path pushed
+    //  real files past Windows' 260-character limit (ADR-059).
+    fput(fh, indent + "    if " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " cap mkdir " + q + bt + "_ds_dir" + ap + q)
     fput(fh, indent + "")
-    fput(fh, indent + "    local _trans_files : dir " + q + bt + "_ds_dir" + ap + q + " files " + q + "*.xlsx" + q + ", respectcase")
+    fput(fh, indent + "    local _trans_files " + q + q)
+    fput(fh, indent + "    cap local _trans_files : dir " + q + bt + "_ds_dir" + ap + q + " files " + q + "*.xlsx" + q + ", respectcase")
     fput(fh, indent + "    local _trans_files : list sort _trans_files")
     fput(fh, indent + "    local _trans_root " + q + bt + "_ds_dir" + ap + q)
     fput(fh, indent + "")
     fput(fh, indent + "    *  Nothing filed under the dataset folder — look in the parent.")
     fput(fh, indent + "    if " + bt + ": word count " + bt + "_trans_files" + ap + ap + " == 0 {")
     fput(fh, indent + "        local _search_pat " + q + "*" + dsname + "*.xlsx" + q)
+    fput(fh, indent + "        if " + q + dol + "mdf_package" + q + " == " + q + "1" + q + " local _search_pat " + q + "*.xlsx" + q)
     fput(fh, indent + "        local _trans_files : dir " + q + dol + "trans_translated_dir" + q + " files " + q + bt + "_search_pat" + ap + q + ", respectcase")
     fput(fh, indent + "        if " + bt + ": word count " + bt + "_trans_files" + ap + ap + " == 0 {")
     fput(fh, indent + "            *  A single-dataset project has no reason to carry the dataset name.")
@@ -1825,7 +2450,7 @@ void write_mod_oe_apply(real scalar fh, string scalar q, string scalar bt, strin
     fput(fh, indent + "        }")
     fput(fh, indent + "        local _trans_files : list sort _trans_files")
     fput(fh, indent + "        local _trans_root " + q + dol + "trans_translated_dir" + q)
-    fput(fh, indent + "        if " + bt + ": word count " + bt + "_trans_files" + ap + ap + " > 0 {")
+    fput(fh, indent + "        if " + bt + ": word count " + bt + "_trans_files" + ap + ap + " > 0 & " + q + dol + "mdf_package" + q + " != " + q + "1" + q + " {")
     fput(fh, indent + "            di as txt " + q + "  NOTE: reading loose files from 02_Translated/. Move them into" + q)
     fput(fh, indent + "            di as txt " + q + "        " + bt + "_ds_folder" + ap + "/ so each dataset stays separate." + q)
     fput(fh, indent + "        }")
@@ -2682,6 +3307,14 @@ write_selection_guard(fh, q, bt, ap, dol, pname)
         fput(fh, "local _cln_file " + q + dol + "hfc_run_dir/" + bt + "_ds_name" + ap + "_CLEANED_" + dol + "hfc_folder_date.dta" + q)
         fput(fh, "global dta_cleaned_1 " + q + bt + "_cln_file" + ap + q)
         fput(fh, "")
+        //  Sort ties are broken by a random stream that every earlier sort in
+        //  the session advances, so a duplicates drop or a _n == 1 keep chose
+        //  its row by how much ran before this block. Fixed per dataset, the
+        //  block cleans the same way in the project, in a per-dataset package
+        //  and on any machine (ADR-059).
+        fput(fh, "*  ── Same cleaning wherever this runs: fix how sort ties are broken ────────")
+        fput(fh, "set sortseed 11235813")
+        fput(fh, "")
         fput(fh, "*  ── Label this dataset, then clean it ──────────────────────────────────────")
         write_sibling_call(fh, q, bt, ap, dol, "01_Labeling.do", "1",
             "  DS1: 01_Labeling.do did not travel with this file — using the dataset as it stands.", "1")
@@ -2716,6 +3349,13 @@ else {
 
         write_boxed_marker(fh, "[START CLEANING " + full_lbl + "]")
         fput(fh, "")
+        //  A per-dataset Deliverables package carries this dataset or it does
+        //  not; the block runs only for the one it carries. Inside a project,
+        //  and for a file carried off with all its data, every block runs
+        //  exactly as before (ADR-059).
+        fput(fh, "*  Runs unless this is a Deliverables package that does not carry DS" + strofreal(_k) + ".")
+        fput(fh, "if " + q + dol + "mdf_standalone" + q + " != " + q + "1" + q + " | " + q + dol + "{mdf_ds_here_" + strofreal(_k) + "}" + q + " == " + q + "1" + q + " {")
+        fput(fh, "")
         write_selection_guard(fh, q, bt, ap, dol, pname)
         fput(fh, "")
         fput(fh, "*  ── Define File Paths ──────────────────────────────────────────────────────")
@@ -2730,6 +3370,14 @@ else {
         fput(fh, "local _raw_file " + q + dol + "hfc_raw_snapshot_dir/" + bt + "_ds_name" + ap + "_" + dol + "hfc_folder_date.dta" + q)
         fput(fh, "local _cln_file " + q + dol + "hfc_run_dir/" + bt + "_ds_name" + ap + "_CLEANED_" + dol + "hfc_folder_date.dta" + q)
         fput(fh, "global dta_cleaned_" + strofreal(_k) + " " + q + bt + "_cln_file" + ap + q)
+        fput(fh, "")
+        //  Sort ties are broken by a random stream that every earlier sort in
+        //  the session advances, so a duplicates drop or a _n == 1 keep chose
+        //  its row by how much ran before this block. Fixed per dataset, the
+        //  block cleans the same way in the project, in a per-dataset package
+        //  and on any machine (ADR-059).
+        fput(fh, "*  ── Same cleaning wherever this runs: fix how sort ties are broken ────────")
+        fput(fh, "set sortseed 11235813")
         fput(fh, "")
         fput(fh, "*  ── Label this dataset, then clean it ──────────────────────────────────────")
         write_sibling_call(fh, q, bt, ap, dol, "01_Labeling.do", strofreal(_k),
@@ -2751,6 +3399,9 @@ else {
         fput(fh, "save " + q + bt + "_cln_file" + ap + q + ", replace")
         fput(fh, "}")
         fput(fh, "else di as error " + q + "  DS" + strofreal(_k) + ": no data available — cleaning skipped." + q)
+        fput(fh, "")
+        fput(fh, "}")
+        fput(fh, "else di as txt " + q + "  DS" + strofreal(_k) + " (" + dsname + "): not in this package — skipped." + q)
         fput(fh, "")
         write_boxed_marker(fh, "[END CLEANING " + full_lbl + "]")
         fput(fh, "")

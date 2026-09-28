@@ -1,5 +1,5 @@
 *! mdf_instruments.ado — Master DO File pipeline stage 14 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  CAPI subfolders, instrument archiving, translation folders
 
@@ -39,9 +39,11 @@ program define mdf_instruments
                 di as error "  DS`_ia': dataset name unresolved — skipping folder setup."
                 continue
             }
-            local _new_name "`_fnum'_SurveyCTO_`_base'"
-            local _quest_name "`_fnum'_Questionnaire_`_base'"
-            local _others_name "`_fnum'_Others_`_base'"
+            *  v11: NN_<dataset> in all three instrument folders.
+            *  v10: NN_SurveyCTO_ / NN_Questionnaire_ / NN_Others_<dataset>.
+            local _new_name "`_fnum'_${hfcsys_capi_sub}`_base'"
+            local _quest_name "`_fnum'_${hfcsys_quest_sub}`_base'"
+            local _others_name "`_fnum'_${hfcsys_others_sub}`_base'"
             local _old_path "$capi_dir/form_`_fnum'"
             local _new_path "$capi_dir/`_new_name'"
 

@@ -1,5 +1,5 @@
 *! mdf_setup.ado — Master DO File pipeline stage 1 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  helper programs, ROOT resolution, framework identity
 
@@ -10,8 +10,8 @@ program define mdf_setup
     _mdf_load
 
 
-    global hfc_version                "10.2.0"
-    global hfc_layout_version         "v10"
+    global hfc_version                "11.0.0"
+    *  $hfc_layout_version is decided per project by mdf_paths (ADR-058).
     global hfcsys_clean_delta_pct_max 5
     global hfcsys_required_vars       "key enum fielddate duration"
 
@@ -136,6 +136,39 @@ program define mdf_setup
     if `"`_v'"' == "" {
         di as error "ERROR: the Master DO File framework will not run."
         di as error `"       net install mdf, from("$mdf_source") replace"'
+        exit 601
+    }
+
+    *  A framework OLDER than this Master is not a mismatch to warn about and
+    *  carry on: it cannot know the stages, folders and switches the Master was
+    *  written for, and it fails late — or worse, builds a new project in the
+    *  wrong layout and says nothing. Newer-than-required stays a warning, for
+    *  the offline field analyst the paragraph above protects.
+    local _vn = 0
+    local _rn = 0
+    foreach _w in v r {
+        if "`_w'" == "v" local _s `"`_v'"'
+        else             local _s "$mdf_required"
+        local _s = subinstr(`"`_s'"', "-", ".", .)
+        local _s = subinstr(`"`_s'"', ".", " ", .)
+        local _a : word 1 of `_s'
+        local _b : word 2 of `_s'
+        local _c : word 3 of `_s'
+        local _num = 1000000 * real("0`_a'") + 1000 * real("0`_b'") + real("0`_c'")
+        if "`_w'" == "v" local _vn = `_num'
+        else             local _rn = `_num'
+    }
+    if "$mdf_required" != "" & `_vn' < `_rn' {
+        di as error "========================================================================="
+        di as error "  FRAMEWORK TOO OLD FOR THIS MASTER"
+        di as error "========================================================================="
+        di as txt   "  Installed framework : mdf `_v'"
+        di as txt   "  This Master expects : mdf $mdf_required"
+        di as txt   "  The update could not be applied (no connection, or mdf_autoinstall = 0)."
+        di as txt   "  Running on anyway would build or process this project with an older"
+        di as txt   "  framework than the one this Master was written for. Nothing was done."
+        di as result`"  FIX: net install mdf, from("$mdf_source") replace"'
+        di as error "========================================================================="
         exit 601
     }
     if `"`_v'"' != "$mdf_required" {

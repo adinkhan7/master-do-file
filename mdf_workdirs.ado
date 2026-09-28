@@ -1,5 +1,5 @@
 *! mdf_workdirs.ado — Master DO File pipeline stage 7 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  today's raw-data folder and HFC run folder
 
@@ -13,7 +13,7 @@ program define mdf_workdirs
     _mdf_load
 
     *==============================================================================*
-    *  SECTION 6   RAW DATA FOLDER UNDER 02_Data
+    *  SECTION 6   RAW DATA FOLDER UNDER data_dir
     *==============================================================================*
 
     if "$hfc_postfield_active" != "1" {
@@ -38,7 +38,7 @@ program define mdf_workdirs
     }
 
     *==============================================================================*
-    *  SECTION 7   HFC RUN FOLDER  —  03_HFC/NN_<Project>_HFC_<date>/
+    *  SECTION 7   HFC RUN FOLDER  —  hfc_dir/NN_<Project>_HFC_<date>/
     *==============================================================================*
 
     if "$hfc_postfield_active" != "1" {

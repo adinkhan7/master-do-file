@@ -1,5 +1,5 @@
 *! mdf_modules.ado — Master DO File pipeline stage 11 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  pipeline modules, the HFC DO and the Processing DO
 

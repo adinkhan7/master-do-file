@@ -1,5 +1,5 @@
 *! mdf_finalise.ado — post-cleaning merge and publish
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  Replaces the generated 04_DO Files/04_Finalise.do (ADR-055). The logic is
 *!  unchanged; only the standalone header it used to carry is gone, because an
@@ -65,6 +65,10 @@ program define mdf_finalise
     }
 
     if "`_mode'" == "publish" | "`_mode'" == "all" {
+        *  Named by its own folder: 07_Cleaned Dataset/ in a project, 04_Cleaned
+        *  Data/ in a Deliverables package.
+        local _cl = subinstr("$clean_dir", "\", "/", .)
+        local _cleaf = substr("`_cl'", strrpos("`_cl'", "/") + 1, .)
         forvalues _ds = 1/$actual_n_dta {
             local _src "${dta_cleaned_`_ds'}"
             cap confirm file "`_src'"
@@ -75,8 +79,8 @@ program define mdf_finalise
             local _nm "${auto_dsname_`_ds'}"
             if "`_nm'" == "" local _nm "DS`_ds'"
             cap copy "`_src'" "$clean_dir/`_nm'_CLEANED.dta", replace
-            if !_rc di as result "  Published → 07_Cleaned Dataset/`_nm'_CLEANED.dta"
-            else     di as error "  WARNING: could not publish DS`_ds' to 07_Cleaned Dataset."
+            if !_rc di as result "  Published → `_cleaf'/`_nm'_CLEANED.dta"
+            else     di as error "  WARNING: could not publish DS`_ds' to `_cleaf'."
         }
     }
 end

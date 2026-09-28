@@ -1,5 +1,5 @@
 *! mdf_stage.ado — Master DO File pipeline stage 13 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  archive raw data and stage the working copy
 
@@ -48,10 +48,10 @@ program define mdf_stage
     }
 
     *==============================================================================*
-    *  SECTION 18  STAGE THE CURRENT WORKING DATA  →  06_Processing Files/Data/
+    *  SECTION 18  STAGE THE CURRENT WORKING DATA  →  processing_data_dir
     *==============================================================================*
 
-    di as result _n "--- Staging current working data → 06_Processing Files/Data ---"
+    di as result _n "--- Staging current working data → $hfcsys_rel_processing_data_dir ---"
 
     local _staged 0
     foreach _pat in "*.do" "*.csv" "*.dta" {
@@ -62,7 +62,7 @@ program define mdf_stage
                 local _staged = `_staged' + 1
             }
             else {
-                di as error "  WARNING: could not stage `_sf' — left in 02_Data only."
+                di as error "  WARNING: could not stage `_sf' — left in $hfcsys_rel_data_dir only."
             }
         }
     }
@@ -71,6 +71,6 @@ program define mdf_stage
         di as result "  `_staged' file(s) staged for processing."
     }
     else {
-        di as txt    "  Nothing to stage yet — 02_Data/ has no import DO, CSV or DTA."
+        di as txt    "  Nothing to stage yet — $hfcsys_rel_data_dir/ has no import DO, CSV or DTA."
     }
 end

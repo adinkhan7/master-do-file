@@ -1,5 +1,5 @@
 *! mdf_audio.ado — Master DO File pipeline stage 17 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  audio audit
 
@@ -29,7 +29,7 @@ program define mdf_audio
             di as text     "  Stata error code : r(`_st_rc')"
             di as text     "  Stata says       :"
             cap noi error `_st_rc'
-            di as text     "  Failed in        : 04_DO Files/03_Audio.do"
+            di as text     "  Failed in        : $hfcsys_rel_dofiles_dir/03_Audio.do"
             di as text     "  Full log         : $log_file"
             di as error    "  The run stopped here. Nothing after this stage ran."
             di as error    "========================================================================="

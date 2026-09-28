@@ -1,5 +1,5 @@
 *! mdf_log.ado — Master DO File pipeline stage 8 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  open the run log and detect the run type
 
@@ -69,11 +69,11 @@ program define mdf_log
         di as result    "  All project folders created. Pipeline DO files will generate on Run 2."
         di as result    " "
         di as result    "  Next steps:"
-        di as result    "  1)  01_Questionnaire/  ← questionnaire documents"
-        di as result    "  2)  02_CAPI/  ← SurveyCTO .xlsx form(s)"
-        di as result    "      Single dataset : place .xlsx directly in 02_CAPI/."
+        di as result    "  1)  $hfcsys_rel_quest_dir/  ← questionnaire documents"
+        di as result    "  2)  $hfcsys_rel_capi_dir/  ← SurveyCTO .xlsx form(s)"
+        di as result    "      Single dataset : place .xlsx directly in $hfcsys_rel_capi_dir/."
         di as result    "      Multiple datasets: CAPI subfolders are created automatically"
-        di as result    "        on Run 2 once import DO(s) are present in 02_Data/."
+        di as result    "        on Run 2 once import DO(s) are present in $hfcsys_rel_data_dir/."
         di as result    "  3)  $raw_data_dir"
         di as result    "                             ← import .do(s) / .dta(s) / .csv(s) from server"
         di as result    "  4)  Re-run this DO file."

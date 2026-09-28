@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 10.2.0  15sep2026}{...}
+{* *! version 11.0.0  28sep2026}{...}
 {vieweralsosee "[R] net" "help net"}{...}
 {viewerjumpto "Syntax" "mdf##syntax"}{...}
 {viewerjumpto "Description" "mdf##description"}{...}
@@ -54,13 +54,13 @@ once in that session.
 {synoptline}
 {synopt :{bf:mdf_setup}}helper programs, ROOT resolution, framework version check{p_end}
 {synopt :{bf:mdf_validate}}Section 0 sanity checks and switch defaults{p_end}
-{synopt :{bf:mdf_paths}}run dates and every folder path global{p_end}
+{synopt :{bf:mdf_paths}}run dates, the project's folder layout, every folder path global{p_end}
 {synopt :{bf:mdf_folders}}create the project folder tree{p_end}
 {synopt :{bf:mdf_readme}}write the project README{p_end}
 {synopt :{bf:mdf_resolve}}post-field resolution{p_end}
 {synopt :{bf:mdf_workdirs}}today's raw-data folder and HFC run folder{p_end}
 {synopt :{bf:mdf_log}}open the run log and detect the run type{p_end}
-{synopt :{bf:mdf_generate}}00_Directory.do / 00b_Local_Overrides.do, output paths, previous keys{p_end}
+{synopt :{bf:mdf_generate}}the directory file and overrides, output paths, previous keys{p_end}
 {synopt :{bf:mdf_import}}carry the import DO forward, fingerprint it, import{p_end}
 {synopt :{bf:mdf_modules}}pipeline modules, the HFC DO and the Processing DO{p_end}
 {synopt :{bf:mdf_guards}}stale-processing and open-workbook guards{p_end}
@@ -70,6 +70,7 @@ once in that session.
 {synopt :{bf:mdf_hfc}}run the high-frequency checks{p_end}
 {synopt :{bf:mdf_audio}}audio audit{p_end}
 {synopt :{bf:mdf_keys}}archive keys and print the run summary{p_end}
+{synopt :{bf:mdf_deliverables}}build the client handover package (run_deliverables = 1){p_end}
 {synoptline}
 
 {pstd}
@@ -83,10 +84,13 @@ than by Master, and replace DO files those projects used to carry:
 {synoptline}
 
 {pstd}
-A project's {bf:04_DO Files/} therefore holds five files, not eight: the
-Master-owned {bf:00_Directory.do}, and the four an analyst may edit —
-{bf:00b_Local_Overrides.do}, {bf:01_Labeling.do}, {bf:02_Translation.do} and
-{bf:03_Audio.do}.
+{bf:The project folder.} A project created by 11.0.0 has eight folders in the
+order the work flows: {bf:01_Questionnaire}, {bf:02_CAPI}, {bf:03_Data},
+{bf:04_Others}, {bf:05_Processing} (the Processing DO, with {bf:01_Do Files},
+{bf:02_Translation} and {bf:03_Data} inside it), {bf:06_HFC},
+{bf:07_Cleaned Dataset} and {bf:08_Deliverables}. A project built by an earlier
+version keeps its own folders: the layout is read from the hidden
+{bf:.hfc_root} sentinel and nothing is moved.
 
 
 {marker remarks}{...}
@@ -100,58 +104,44 @@ three {it:clean} stops — Run 1, the CAPI pause and the Ghost Run pause — set
 
 {pstd}
 {bf:Version pinning.} Master pins the framework it was written against in
-{bf:$mdf_required}. {cmd:mdf_setup} compares that against the installed version
-and updates only on a mismatch, so once the right version is present no network
-call is made and field runs work offline. Set {bf:$mdf_autoinstall 0} to
-suppress updating entirely.
-
-{pstd}
-{bf:Offline behaviour is not uniform.} A framework that will not run at all is a
-hard stop. A version mismatch that cannot be repaired because GitHub is
-unreachable is a loud warning and the run continues — fieldwork happens on bad
-connections.
+{bf:$mdf_required}. An installed framework {it:older} than that is updated, and
+if it cannot be the run stops before doing anything. One {it:newer} than that
+is a warning and the run continues, which is how a 10.2.0 project keeps working
+on a machine with 11.0.0. Set {bf:$mdf_autoinstall 0} to suppress updating.
 
 {pstd}
 {bf:clear all and the helpers.} Every SurveyCTO import DO issues {cmd:clear all},
-which drops programs and wipes Mata but leaves globals standing. Because the
-helpers ({bf:_hfc_abort}, {bf:_hfc_pause}, {bf:_hfc_mkdir}, {bf:_hfc_hide}) are
-ado files on the adopath, Stata reloads them on demand. Master used to carry
-four identical copies of each for this reason and now carries none.
+which drops programs and wipes Mata but leaves globals standing. The helpers are
+ado files on the adopath, so Stata reloads them on demand.
 
 {pstd}
-{bf:Standalone mode.} A generated DO file that is copied away from its project
-still runs. The {bf:.hfc_root} walk is tried first, so a file inside a project
-can never take this path; only when no project is found above it does the file
-build a context from the folder it is sitting in. Datasets are discovered
-there (or in a {bf:Data/} subfolder), sorted by name into DS1, DS2, ..., with
-framework output — {bf:*_CLEANED}, {bf:*_KEYS_}, {bf:*_MERGED_},
-{bf:*_LABELED_} — excluded so a second run cannot read the first run's results
-as input. Output goes to {bf:MDF_Output/} beside the file. Nothing outside that
-folder is touched, the package need not be installed, and no network call is
-made. Zero datasets, or a count that does not match what the file was generated
-for, stops the run rather than guessing.
+{bf:Where a generated DO file runs.} Inside a project it finds the project's
+{bf:.hfc_root} and runs as part of it. Inside a Deliverables package it finds
+{bf:02_Import & Raw files/} around it and rebuilds the cleaned dataset into
+{bf:04_Cleaned Data/}. Anywhere else it runs on the {bf:.dta} file(s) beside it,
+writing to {bf:MDF_Output/}. In the last two the framework need not be
+installed. It stops rather than guess: no dataset, a count that does not match,
+or a dataset it cannot identify by name ends the run naming what it found.
 
 {pstd}
-{bf:Why the cache is not consulted first.} When the walk fails, the tmpdir root
-cache left by an earlier Master run names a project this file may no longer
-belong to — following it would read that project's data and write results back
-into it. Standalone is tried first, and the cache is left for the one case where
-the file's own folder genuinely cannot be known.
+{bf:The working directory.} Stata does not tell a running DO file where it is
+saved: {cmd:c(do_current)} is empty in Stata 17 from the Do button, from
+Ctrl+A / Ctrl+D and from a nested {cmd:do}. Every generated file therefore starts
+from the working directory. Double-clicking the DO to launch Stata sets it;
+otherwise use File > Change working directory.
 
 {pstd}
-{bf:Ctrl+A / Ctrl+D.} A selection run gives Stata no path for the file, so the
-working directory stands in for the file's folder. Measured on Stata 17,
-{cmd:c(do_current)} comes back empty rather than naming the temp file. Either
-way the run announces the folder it settled on, and stops if that folder holds
-no data.
+{bf:Deliverables.} With {bf:$run_deliverables 1}, {cmd:mdf_deliverables} rebuilds
+{bf:08_Deliverables/}: {bf:01_CAPI & Questionnaire}, {bf:02_Import & Raw files},
+{bf:03_Processing Files} and {bf:04_Cleaned Data} — once per dataset, under
+{bf:NN_<dataset>/}, when there are several. Copied anywhere, the Processing DO
+inside rebuilds the cleaned dataset with no project and no framework installed.
+A file that cannot be copied in is named and the build ends with an error.
 
 {pstd}
-{bf:Deliverables.} With {bf:$run_deliverables 1}, {cmd:mdf_deliverables} writes
-{bf:$ROOT/Deliverables} — the raw data, the processing workflow and the two
-modules it calls, the instrument, translation material where the workflow uses
-it, and the current clean dataset for comparison. Copied anywhere, the workflow
-inside it rebuilds the clean dataset on standalone mode. At 0 the stage returns
-before touching anything.
+{bf:Reproducible cleaning.} Each dataset block of the Processing DO fixes
+Stata's sort tie-breaking ({cmd:set sortseed}) before it starts, so a
+{cmd:duplicates drop} keeps the same row wherever the file runs.
 
 
 {title:Author}

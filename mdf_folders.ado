@@ -1,5 +1,5 @@
 *! mdf_folders.ado — Master DO File pipeline stage 4 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  create the project folder tree
 
@@ -18,15 +18,18 @@ program define mdf_folders
 
     di as result _n "--- Verifying project folder structure ---"
 
+    *  Parents before children: in v11 the DO-file and translation folders sit
+    *  inside 05_Processing/, in v10 they are top-level. 08_Deliverables/ is
+    *  not created here — only a run with run_deliverables = 1 builds it.
     _hfc_mkdir "$surv_inst_dir"
     _hfc_mkdir "$quest_dir"
     _hfc_mkdir "$capi_dir"
-    _hfc_mkdir "$others_dir"
     _hfc_mkdir "$data_dir"
-    _hfc_mkdir "$hfc_dir"
+    _hfc_mkdir "$others_dir"
+    _hfc_mkdir "$processing_dir"
     _hfc_mkdir "$dofiles_dir"
     _hfc_mkdir "$translation_dir"
-    _hfc_mkdir "$processing_dir"
+    _hfc_mkdir "$hfc_dir"
     _hfc_mkdir "$clean_dir"
 
     *  ── 03_HFC: keys grouped by kind ───────────────────────────────────────────
@@ -53,14 +56,14 @@ program define mdf_folders
         di as result "  Moved `_fl_n' flag store(s) → KEYS/.flag_history/ (issue history preserved)."
     }
 
-    *  ── 05_Translation: one place for the whole round-trip ─────────────────────
+    *  ── Translation: one place for the whole round-trip ────────────────────────
     _hfc_mkdir "$trans_exported_dir"
     _hfc_mkdir "$trans_translated_dir"
 
-    *  ── 06_Processing: the current working data ────────────────────────────────
+    *  ── Processing: the current working data ───────────────────────────────────
     _hfc_mkdir "$processing_data_dir"
 
-    di as result "Main folder structure: OK  (v10 layout)"
+    di as result "Main folder structure: OK  ($hfc_layout_version layout)"
 
     *  ── Write the ROOT sentinel ────────────────────────────────────────────────
 

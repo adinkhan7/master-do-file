@@ -1,5 +1,5 @@
 *! _hfc_capi_lockcheck.ado — Master DO File framework helper
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  Count Excel lock files (~$*.xlsx) left by an open workbook.
 *!

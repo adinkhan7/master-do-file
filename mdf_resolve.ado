@@ -1,5 +1,5 @@
 *! mdf_resolve.ado — Master DO File pipeline stage 6 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  post-field resolution
 
@@ -40,12 +40,12 @@ program define mdf_resolve
 
         if "`_pf_hit'" == "" {
             di as error "======================================================================="
-            di as error "  POST-FIELD MODE: no run folder under 03_HFC/ contains any data."
+            di as error "  POST-FIELD MODE: no run folder under $hfcsys_rel_hfc_dir/ contains any data."
             di as error "======================================================================="
             di as txt   "  post_field = 1 re-runs the last archived dataset. It never imports"
             di as txt   "  new data, so there must already be an archived run to work from."
             di as txt   " "
-            di as result"  FIX: set post_field = 0, put the export in 02_Data/, and run once."
+            di as result"  FIX: set post_field = 0, put the export in $hfcsys_rel_data_dir/, and run once."
             di as error "======================================================================="
             _hfc_abort
         }

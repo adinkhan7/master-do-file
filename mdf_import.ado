@@ -1,5 +1,5 @@
 *! mdf_import.ado — Master DO File pipeline stage 10 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  carry the import DO forward, fingerprint it, import
 

@@ -1,5 +1,5 @@
 *! mdf_guards.ado — Master DO File pipeline stage 12 of 19
-*! version 10.2.0   github.com/adinkhan7/master-do-file
+*! version 11.0.0   github.com/adinkhan7/master-do-file
 *!
 *!  stale-processing and open-workbook guards
 
@@ -18,23 +18,20 @@ program define mdf_guards
 
     cap confirm file "$processing_dir/$processing_file"
     if !_rc {
+        *  An old build names a _LABELED_ .dta file to load, e.g.
+        *    local _lbl_file "$hfc_run_dir/<ds>_LABELED_$hfc_folder_date.dta"
+        *  Anything else that mentions the tag — the standalone discovery
+        *  filter, or a message listing framework output — is not a load.
+        *  Matching the bare tag made every 10.2.0 run warn that its current
+        *  file was stale. Read in Mata: a line held in a Stata macro would
+        *  have its own macro references expanded on use.
         local _stale_proc 0
-        tempname _spf
-        cap file open `_spf' using "$processing_dir/$processing_file", read text
-        if !_rc {
-            file read `_spf' _spline
-            while r(eof) == 0 {
-                local _spt = strtrim(`"`_spline'"')
-                if substr(`"`_spt'"', 1, 1) != "*" {
-                    if strpos(`"`_spline'"', "_LABELED_") > 0 local _stale_proc 1
-                }
-                file read `_spf' _spline
-            }
-            cap file close `_spf'
-        }
+        mata: _mdf_g_L = strtrim(cat(st_global("processing_dir") + "/" + st_global("processing_file")))
+        mata: st_local("_stale_proc", strofreal(sum((substr(_mdf_g_L, 1, 1) :!= "*") :& (strpos(_mdf_g_L, "_LABELED_") :> 0) :& (strpos(_mdf_g_L, ".dta") :> 0) :& (strpos(_mdf_g_L, "strpos(") :== 0)) > 0))
+        cap mata: mata drop _mdf_g_L
         if `_stale_proc' == 1 {
             di as error _n "======================================================================="
-            di as error    "  WARNING: 06_Processing Files/$processing_file is from an older build."
+            di as error    "  WARNING: $hfcsys_rel_processing_dir/$processing_file is from an older build."
             di as error    " "
             di as error    "  It loads a _LABELED_ dataset that this version no longer writes."
             di as error    "  Labeling now hands the data to cleaning in memory."
@@ -42,7 +39,7 @@ program define mdf_guards
             di as error    "  LEFT ALONE, YOUR CLEANING WILL RUN ON UNLABELED RAW DATA."
             di as error    " "
             di as error    "  Fix it once:"
-            di as error    "   1) Open  06_Processing Files/${processing_file}.new  (written beside it)"
+            di as error    "   1) Open  $hfcsys_rel_processing_dir/${processing_file}.new  (written beside it)"
             di as error    "   2) Copy your cleaning code from the old file into the SECTION A /"
             di as error    "      SECTION B slots of the .new file."
             di as error    "   3) Replace $processing_file with the .new file."
