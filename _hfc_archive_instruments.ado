@@ -1,5 +1,5 @@
 *! _hfc_archive_instruments.ado — Master DO File framework helper
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  Keep the newest instrument, archive superseded versions.
 *!

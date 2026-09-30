@@ -1,5 +1,5 @@
 *! mdf_paths.ado — Master DO File pipeline stage 3 of 19
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  run dates, the project's folder layout, and every folder path global
 
@@ -124,6 +124,9 @@ program define mdf_paths
 
     global hfc_dofiles_dir     "$dofiles_dir"
     global hfc_keys_master_dir "$hfc_keys_hfc_dir"
+
+    *  ── The framework runtime beside the modules (ADR-061) ─────────────────────
+    global mdf_rt_dir          "$dofiles_dir/_mdf"
 
     *  ── Folder names relative to ROOT, for messages ────────────────────────────
     *  Messages name folders the way the analyst sees them, whichever layout the

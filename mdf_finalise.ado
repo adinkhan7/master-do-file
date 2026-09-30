@@ -1,5 +1,5 @@
 *! mdf_finalise.ado — post-cleaning merge and publish
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  Replaces the generated 04_DO Files/04_Finalise.do (ADR-055). The logic is
 *!  unchanged; only the standalone header it used to carry is gone, because an
@@ -78,9 +78,47 @@ program define mdf_finalise
             }
             local _nm "${auto_dsname_`_ds'}"
             if "`_nm'" == "" local _nm "DS`_ds'"
+            if "$mdf_package" == "1" _mdf_fin_verify `"`_src'"' `"$clean_dir/`_nm'_CLEANED.dta"'
             cap copy "`_src'" "$clean_dir/`_nm'_CLEANED.dta", replace
             if !_rc di as result "  Published → `_cleaf'/`_nm'_CLEANED.dta"
             else     di as error "  WARNING: could not publish DS`_ds' to `_cleaf'."
         }
     }
+end
+
+*  A Deliverables package is shipped with the cleaned dataset it rebuilds, so a
+*  rebuild can say whether it reproduced it (ADR-061). A zero return code is not
+*  that proof; an identical datasignature is. A shipped copy that differs is
+*  kept beside the new one, never overwritten.
+program define _mdf_fin_verify
+    version 16
+    args _new _ref
+    cap confirm file `"`_ref'"'
+    if _rc {
+        di as txt "  No cleaned dataset was shipped here to compare the rebuild with."
+        exit 0
+    }
+    preserve
+    qui use `"`_ref'"', clear
+    qui datasignature
+    local _s0 `"`r(datasignature)'"'
+    qui use `"`_new'"', clear
+    qui datasignature
+    local _s1 `"`r(datasignature)'"'
+    restore
+    if `"`_s0'"' == `"`_s1'"' {
+        di as result "  REPRODUCED: identical to the cleaned dataset shipped with this package."
+        di as txt    `"              datasignature `_s1'"'
+        exit 0
+    }
+    local _keep = subinstr(`"`_ref'"', "_CLEANED.dta", "_CLEANED_REFERENCE.dta", 1)
+    cap confirm file `"`_keep'"'
+    if _rc cap copy `"`_ref'"' `"`_keep'"'
+    di as error "  ==================================================================="
+    di as error "  NOT REPRODUCED: the rebuild differs from the shipped cleaned dataset"
+    di as error "  ==================================================================="
+    di as txt   `"    shipped : `_s0'"'
+    di as txt   `"    rebuilt : `_s1'"'
+    di as txt   "    The shipped copy is kept as *_CLEANED_REFERENCE.dta for comparison."
+    di as error "  ==================================================================="
 end

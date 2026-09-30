@@ -1,5 +1,5 @@
 *! mdf_readme.ado — Master DO File pipeline stage 5 of 19
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  write the project README
 *!
@@ -61,9 +61,10 @@ program define mdf_readme
         file write `_mf' "| `P'/${project_name}_Processing.do | THE cleaning file; produces the cleaned dataset | 2 |" _n
         file write `_mf' "| `F'/`DF' | all path globals; single source of truth | 1 |" _n
         file write `_mf' "| `F'/00b_Local_Overrides.do | your machine-specific overrides | 3 |" _n
-        file write `_mf' "| `F'/01_Labeling.do | CAPI value labels via ODKSplit | 2 |" _n
-        file write `_mf' "| `F'/02_Translation.do | open-ended export/re-import round trip | 2 |" _n
+        file write `_mf' "| `F'/01_Labeling.do | CAPI value labels, then YOUR manual labels | 2 |" _n
+        file write `_mf' "| `F'/02_Translation.do | returned translations, then YOUR manual overrides; export | 2 |" _n
         file write `_mf' "| `F'/03_Audio.do | audio sampling for back-checks | 2 |" _n
+        file write `_mf' "| `F'/_mdf/ | framework runtime: the labeling and translation engines (hidden) | 1 |" _n
         file write `_mf' "| `T'/ | 01_Exported (sent out), 02_Translated (returned) | analyst work |" _n
         file write `_mf' "| `PD'/ | the current working data; your own support files for cleaning | analyst work |" _n
         file write `_mf' "| `H'/02_${project_name}_HFC.do | the check script | 2 |" _n
@@ -166,10 +167,44 @@ program define mdf_readme
         file write `_mf' "starttime and duration. If a variable cannot be derived at all, the checks" _n
         file write `_mf' "that need it are skipped with a message rather than failing the run." _n
         file write `_mf' "" _n
-        file write `_mf' "## Standalone mode" _n
+        file write `_mf' "## Where your own changes go" _n
         file write `_mf' "" _n
-        file write `_mf' "A generated DO file works when it is copied away from this project. Put it" _n
-        file write `_mf' "in a folder with the dataset(s) it should read and run it: finding no" _n
+        file write `_mf' "Every generated DO file marks its sections [SAFE TO EDIT] or [MDF GENERATED" _n
+        file write `_mf' "- DO NOT EDIT]. Master never overwrites these files once they exist." _n
+        file write `_mf' "" _n
+        file write `_mf' "- Cleaning rules: the Processing DO, sections 2 (field cleaning) and 3" _n
+        file write `_mf' "  (post-field cleaning), one pair per dataset." _n
+        file write `_mf' "- Labels the CAPI form cannot supply: 01_Labeling.do, MANUAL LABELING." _n
+        file write `_mf' "- Corrections the returned translation files do not carry:" _n
+        file write `_mf' "  02_Translation.do, MANUAL TRANSLATION OVERRIDES." _n
+        file write `_mf' "- Check thresholds and your own checks: the HFC DO, CHECK SETTINGS and" _n
+        file write `_mf' "  CUSTOM CHECKS." _n
+        file write `_mf' "" _n
+        file write `_mf' "When the framework's template for one of these files changes, Master" _n
+        file write `_mf' "writes the new version beside yours as <file>.new. For the Processing DO" _n
+        file write `_mf' "the .new already carries your cleaning code; review it, then replace your" _n
+        file write `_mf' "file with it. The header of each file (author, organisation, contact," _n
+        file write `_mf' "description) comes from the project details in Section 0." _n
+        file write `_mf' "" _n
+        file write `_mf' "## Running a DO file on its own" _n
+        file write `_mf' "" _n
+        file write `_mf' "Stata does not tell a running DO file where it is saved. Every generated" _n
+        file write `_mf' "file therefore searches upward from Stata's WORKING DIRECTORY for its" _n
+        file write `_mf' "project (or its Deliverables package), checks that what it found is its" _n
+        file write `_mf' "own project by name, and loads that project's settings - never anything" _n
+        file write `_mf' "left in the Stata session by another project or package. Launching Stata" _n
+        file write `_mf' "by double-clicking a DO file sets the working directory to its folder;" _n
+        file write `_mf' "otherwise use File > Change working directory." _n
+        file write `_mf' "" _n
+        file write `_mf' "The Processing DO, 01_Labeling.do, 02_Translation.do and 03_Audio.do run" _n
+        file write `_mf' "only inside this project or inside a Deliverables package. Anywhere else" _n
+        file write `_mf' "they stop, write nothing, and say where to run them. To carry the" _n
+        file write `_mf' "processing away, build the Deliverables package (below)." _n
+        file write `_mf' "" _n
+        file write `_mf' "## Standalone mode (the HFC DO)" _n
+        file write `_mf' "" _n
+        file write `_mf' "The HFC DO still works when it is copied away from this project. Put it" _n
+        file write `_mf' "in a folder with the dataset(s) it should check and run it: finding no" _n
         file write `_mf' "project above itself, it builds a small context from that folder instead." _n
         file write `_mf' "It announces this, naming the folder and every dataset it picked up." _n
         file write `_mf' "" _n
@@ -177,17 +212,12 @@ program define mdf_readme
         file write `_mf' "needed, the framework package does not have to be installed, and no" _n
         file write `_mf' "network connection is used." _n
         file write `_mf' "" _n
-        file write `_mf' "  Supported   the Processing DO, 01_Labeling.do, 02_Translation.do," _n
-        file write `_mf' "              03_Audio.do and the HFC DO." _n
+        file write `_mf' "  Supported   the HFC DO." _n
         file write `_mf' "  Inputs      *.dta beside the DO, or in the first of Data/, 02_Data/," _n
         file write `_mf' "              01_Data/ or 03_Data/ that holds any. Sorted by name: first" _n
         file write `_mf' "              is DS1, second DS2. Framework output (*_CLEANED, *_KEYS_," _n
         file write `_mf' "              *_MERGED_, *_LABELED_) is never counted, so a second run" _n
         file write `_mf' "              cannot read the first run's results as input." _n
-        file write `_mf' "  Modules     beside the DO, or in a 01_Do Files/ subfolder." _n
-        file write `_mf' "  Extras      a CAPI/ or 02_CAPI/ subfolder is used for labeling; a" _n
-        file write `_mf' "              Translation/, 02_Translation/ or 05_Translation/ subfolder" _n
-        file write `_mf' "              for returned text." _n
         file write `_mf' "  Output      MDF_Output/ beside the DO." _n
         file write `_mf' "  Settings    whatever Section 0 held when the file was generated." _n
         file write `_mf' "" _n
@@ -217,9 +247,12 @@ program define mdf_readme
         file write `_mf' "      02_Import & Raw files/     the raw dataset, its import DO and CSV" _n
         file write `_mf' "      03_Processing Files/       ${project_name}_Processing.do" _n
         file write `_mf' "        01_Do Files/             01_Labeling.do, 02_Translation.do" _n
+        file write `_mf' "          _mdf/                  the runtime: the engines this project ran," _n
+        file write `_mf' "                                 the package's settings (mdf_package.do)" _n
         file write `_mf' "        02_Translation/          01_Exported/, 02_Translated/" _n
         file write `_mf' "        03_Data/                 your support files from `PD'/" _n
         file write `_mf' "      04_Cleaned Data/           the cleaned dataset" _n
+        file write `_mf' "      README.md                  how the client rebuilds it" _n
         file write `_mf' "" _n
         file write `_mf' "With more than one dataset the same four folders appear once per dataset," _n
         file write `_mf' "under `V'/NN_<dataset>/, each holding only that dataset. The" _n
@@ -236,6 +269,14 @@ program define mdf_readme
         file write `_mf' "" _n
         file write `_mf' "The package's DO needs Stata's working directory to be inside the package" _n
         file write `_mf' "— double-clicking the DO does this — and says so if it is not." _n
+        file write `_mf' "" _n
+        file write `_mf' "**What the rebuild checks.** Every setting comes from the package's own" _n
+        file write `_mf' "_mdf/mdf_package.do, written when it was built, never from the Stata" _n
+        file write `_mf' "session. Before anything runs it confirms that the package is this file's" _n
+        file write `_mf' "project, that no path is too long for Windows, and that the raw dataset is" _n
+        file write `_mf' "the one it was built from, by name and by datasignature; anything else" _n
+        file write `_mf' "stops the run. At the end it compares the rebuilt dataset with the one" _n
+        file write `_mf' "shipped in 04_Cleaned Data/ and reports REPRODUCED or NOT REPRODUCED." _n
         if "$hfc_layout_version" == "v10" {
             file write `_mf' "" _n
             file write `_mf' "A Processing DO still on a pre-v11 template cannot recognise this package;" _n

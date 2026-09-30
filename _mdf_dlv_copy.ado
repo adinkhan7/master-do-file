@@ -1,5 +1,5 @@
 *! _mdf_dlv_copy.ado — copy one file into the Deliverables package, or say why not
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  Every file the package carries goes through here, so none can go missing
 *!  quietly. A failed copy is counted in $hfcsys_dlv_fail and named on screen;

@@ -1,5 +1,5 @@
 *! mdf_modules.ado — Master DO File pipeline stage 11 of 19
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  pipeline modules, the HFC DO and the Processing DO
 
@@ -73,6 +73,8 @@ program define mdf_modules
     local _nds      "$actual_n_dta"   // force the generator loops to the exact DTA count
     _mdf_load
     mata: mdf_modules_main()
+    *  The runtime is framework code, not the analyst's (ADR-033, ADR-061).
+    _hfc_hide "$mdf_rt_dir" 1
 
     *  ── Retire framework files nothing references any more ─────────────────
     *  10.1.1 turned 00a_Bootstrap.do, 04_Finalise.do and 05_Core_Variables.do

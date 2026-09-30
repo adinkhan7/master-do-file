@@ -1,5 +1,5 @@
 *! _mdf_deliv_legacy.ado — the v10.2.0 Deliverables package, kept verbatim
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  Called by mdf_deliverables when the project's Processing DO is still on a
 *!  pre-v11 template (ADR-059). Such a file cannot recognise the v11 package

@@ -1,5 +1,5 @@
 *! mdf_validate.ado — Master DO File pipeline stage 2 of 19
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  Section 0 sanity checks and switch defaults
 
@@ -41,4 +41,17 @@ program define mdf_validate
     if "$inputcorrection" == "" global inputcorrection 0
 
     if "$verbose" == "" global verbose 0
+
+    *  Project details reach the generated file headers (ADR-061) only from a
+    *  Master that sets them. One written for an earlier framework does not, and
+    *  what another project's Master left in this Stata session is not this
+    *  project's author.
+    local _rq = subinstr("$mdf_required", ".", " ", .)
+    local _rq1 = real(word("`_rq'", 1))
+    local _rq2 = real(word("`_rq'", 2))
+    if missing(`_rq1') | `_rq1' < 11 | (`_rq1' == 11 & (missing(`_rq2') | `_rq2' < 1)) {
+        foreach _g in project_lead project_email organisation project_description {
+            global `_g' ""
+        }
+    }
 end

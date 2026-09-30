@@ -1,5 +1,5 @@
 *! _hfc_pause.ado — Master DO File framework helper
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  A workflow checkpoint, not a failure: exit 0. Never conflate the two.
 *!

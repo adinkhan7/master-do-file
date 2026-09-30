@@ -1,5 +1,5 @@
 *! _hfc_hide.ado — Master DO File framework helper
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  Mark framework state hidden on Windows; a no-op elsewhere.
 *!

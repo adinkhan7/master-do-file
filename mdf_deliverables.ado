@@ -1,5 +1,5 @@
 *! mdf_deliverables.ado — Master DO File pipeline stage 19 of 19
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  build the client handover package (ADR-059, amending ADR-057)
 *!
@@ -58,6 +58,10 @@ program define mdf_deliverables
     local _tpl ""
     mata: st_local("_tpl", read_template_version(st_global("processing_dir") + "/" + st_global("processing_file")))
     local _maj = real(word(subinstr("`_tpl'", ".", " ", .), 1))
+    local _min = real(word(subinstr("`_tpl'", ".", " ", .), 2))
+    if missing(`_min') local _min 0
+    *  From 11.1 the package carries its own runtime and settings (ADR-061).
+    local _v111 = !missing(`_maj') & (`_maj' > 11 | (`_maj' == 11 & `_min' >= 1))
     if missing(`_maj') | `_maj' < 11 {
         di as txt _n "  NOTE: $processing_file is on a pre-v11 template" _c
         if "`_tpl'" != "" di as txt " (`_tpl')." _c
@@ -68,6 +72,14 @@ program define mdf_deliverables
         _mdf_deliv_legacy
         cap log close hfc_master
         exit
+    }
+
+    if !`_v111' {
+        di as error _n "  WARNING: $processing_file is on the `_tpl' template. Its package reads"
+        di as error    "           settings baked into that file when it was first generated, and"
+        di as error    "           inherits switches left in the Stata session by anything run"
+        di as error    "           before it. It may not reproduce the cleaned data. Replace it"
+        di as error    "           with ${processing_file}.new (your cleaning is carried into it)."
     }
 
     di as result _n "--- Building the Deliverables package → $hfcsys_rel_deliv_dir/ ---"
@@ -235,14 +247,26 @@ program define mdf_deliverables
         }
         if `"`_snap'"' == "" local _snap `"`_pos'"'
         local _st ""
+        local _rsig ""
+        local _robs ""
         if `"`_snap'"' != "" {
             local _st = subinstr(`"`_snap'"', "_$hfc_folder_date.dta", "", 1)
             local _st = subinstr(`"`_st'"', ".dta", "", 1)
             _mdf_dlv_copy `"$hfc_raw_snapshot_dir/`_snap'"' `"`_B'/`_st'.dta"'
-            if r(ok) di as result "    raw data      → 02_Import & Raw files/`_st'.dta"
+            local _rawok = r(ok)
+            if `_rawok' di as result "    raw data      → 02_Import & Raw files/`_st'.dta"
             else {
                 di as error "    WARNING: could not copy the raw dataset `_snap'."
                 local _warn = `_warn' + 1
+            }
+            *  What the package's rebuild will check the raw data against.
+            if `_rawok' & `_v111' {
+                preserve
+                qui use `"`_B'/`_st'.dta"', clear
+                qui datasignature
+                local _rsig `"`r(datasignature)'"'
+                local _robs = _N
+                restore
             }
         }
         else {
@@ -329,6 +353,47 @@ program define mdf_deliverables
             }
         }
 
+        *  The runtime (ADR-061): the engines this project ran, byte for byte;
+        *  the package's own context builder; the framework helpers the DO
+        *  files call. The package needs nothing else from this framework.
+        if `_v111' {
+            local _R "`_C'/01_Do Files/_mdf"
+            _hfc_mkdir "`_R'"
+            _hfc_mkdir "`_R'/ado"
+            local _rtn 0
+            foreach _e in mdf_labeling mdf_translation {
+                _mdf_dlv_copy "$mdf_rt_dir/`_e'.do" `"`_R'/`_e'.do"'
+                if r(ok) local _rtn = `_rtn' + 1
+            }
+            foreach _a in _mdf_rt_package _hfc_abort _hfc_pause _hfc_mkdir mdf_core_vars mdf_finalise {
+                local _fn ""
+                cap findfile `_a'.ado
+                if !_rc local _fn `"`r(fn)'"'
+                if `"`_fn'"' == "" {
+                    di as error "    NOT COPIED: `_a'.ado (not found on the adopath)"
+                    global hfcsys_dlv_fail = $hfcsys_dlv_fail + 1
+                    continue
+                }
+                if "`_a'" == "_mdf_rt_package" _mdf_dlv_copy `"`_fn'"' `"`_R'/mdf_runtime.do"'
+                else                           _mdf_dlv_copy `"`_fn'"' `"`_R'/ado/`_a'.ado"'
+                if r(ok) local _rtn = `_rtn' + 1
+            }
+            di as result "    runtime       → 03_Processing Files/01_Do Files/_mdf/ (`_rtn' file(s))"
+            *  A module still on an older template brings its own, older
+            *  machinery with it, and with it the defects 11.1.0 removed.
+            foreach _m in "01_Labeling.do" "02_Translation.do" {
+                local _mt ""
+                mata: st_local("_mt", read_template_version(st_global("dofiles_dir") + "/`_m'"))
+                local _mma = real(word(subinstr("`_mt'", ".", " ", .), 1))
+                local _mmi = real(word(subinstr("`_mt'", ".", " ", .), 2))
+                if missing(`_mma') | `_mma' < 11 | (`_mma' == 11 & `_mmi' < 1) {
+                    di as error "    WARNING: `_m' is on an older template. The package carries it"
+                    di as error "             as it is; replace it with `_m'.new for the 11.1 design."
+                    local _warn = `_warn' + 1
+                }
+            }
+        }
+
         *  Translation: this dataset's folders. Returned files lying loose in
         *  02_Translated/ are what the apply step falls back to when the
         *  dataset's folder is empty, so they travel in the same place.
@@ -394,6 +459,29 @@ program define mdf_deliverables
             di as txt "    NOTE: no cleaned dataset for `_nm' yet — 04_Cleaned Data/ is empty until"
             di as txt "          the package's Processing DO is run."
         }
+
+        if `_v111' {
+            *  ── The package's identity and settings (ADR-061) ─────────────────
+            local _setf "`_C'/01_Do Files/_mdf/mdf_package.do"
+            local _short = substr(ustrregexra("$project_name", "[^A-Za-z0-9]+", "_"), 1, 24)
+            mata: write_package_settings()
+            cap confirm file `"`_setf'"'
+            if _rc {
+                di as error "    NOT WRITTEN: _mdf/mdf_package.do"
+                global hfcsys_dlv_fail = $hfcsys_dlv_fail + 1
+            }
+            else di as result "    settings      → 03_Processing Files/01_Do Files/_mdf/mdf_package.do"
+            _mdf_dlv_readme `"`_pk'"' `"`_nm'"' `_k' `_nds'
+
+            *  ── Every file in it must be openable where it is built ──────────
+            local _long ""
+            mata: st_local("_long", _mdf_longest(st_local("_pk")))
+            if ustrlen(`"`_long'"') > 259 {
+                di as error "    PATH TOO LONG (" ustrlen(`"`_long'"') " characters; Windows stops at 260):"
+                di as error `"      `_long'"'
+                global hfcsys_dlv_fail = $hfcsys_dlv_fail + 1
+            }
+        }
     }
 
     if "$merge_required" == "1" {
@@ -419,7 +507,7 @@ program define mdf_deliverables
         }
     }
     foreach _pk of local _dirs {
-        foreach _sd in "03_Processing Files" "03_Processing Files/01_Do Files" {
+        foreach _sd in "03_Processing Files" "03_Processing Files/01_Do Files" "03_Processing Files/01_Do Files/_mdf" {
             local _dl ""
             cap local _dl : dir "`_pk'/`_sd'" files "*.do", respectcase
             foreach _x of local _dl {

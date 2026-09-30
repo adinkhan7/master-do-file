@@ -1,5 +1,5 @@
 *! mdf_setup.ado — Master DO File pipeline stage 1 of 19
-*! version 11.0.0   github.com/adinkhan7/master-do-file
+*! version 11.1.0   github.com/adinkhan7/master-do-file
 *!
 *!  helper programs, ROOT resolution, framework identity
 
@@ -10,7 +10,7 @@ program define mdf_setup
     _mdf_load
 
 
-    global hfc_version                "11.0.0"
+    global hfc_version                "11.1.0"
     *  $hfc_layout_version is decided per project by mdf_paths (ADR-058).
     global hfcsys_clean_delta_pct_max 5
     global hfcsys_required_vars       "key enum fielddate duration"
@@ -65,6 +65,11 @@ program define mdf_setup
     cd "${ROOT}"
     global ROOT = subinstr("`c(pwd)'", "\", "/", .)
     di as result "ROOT dynamically anchored → ${ROOT}"
+
+    *  The generated DO files this run calls keep its context. One run on its
+    *  own later in the session keeps it only if it belongs to this same
+    *  project; anything else resolves its own (ADR-061).
+    global mdf_pipeline_root "${ROOT}"
 
     *  Nested-project check. If any ancestor carries a sentinel, this Master is
     *  sitting inside another project. That is legal, but it is almost never what
@@ -122,12 +127,14 @@ program define mdf_setup
     *  an unreachable update would strand an analyst who already has a working
     *  copy.
     local _v ""
+    local _upd_rc ""
     cap qui mdf version
     if !_rc local _v `"`r(version)'"'
 
     if `"`_v'"' != "$mdf_required" & "$mdf_autoinstall" == "1" {
         di as result "Updating the framework (`_v' -> $mdf_required)"
         cap noi net install mdf, from("$mdf_source") replace
+        local _upd_rc = _rc
         local _v ""
         cap qui mdf version
         if !_rc local _v `"`r(version)'"'
@@ -164,7 +171,20 @@ program define mdf_setup
         di as error "========================================================================="
         di as txt   "  Installed framework : mdf `_v'"
         di as txt   "  This Master expects : mdf $mdf_required"
-        di as txt   "  The update could not be applied (no connection, or mdf_autoinstall = 0)."
+        *  Say which of the three causes it was: an update that downloaded fine
+        *  but found nothing newer is a source problem, not a connection one.
+        if "`_upd_rc'" == "0" {
+            di as txt   "  The update ran, but the package source still serves mdf `_v':"
+            di as txt   "    $mdf_source"
+            di as txt   "  Either mdf $mdf_required is not published there yet, or GitHub's"
+            di as txt   "  cache has not caught up (wait five minutes and re-run)."
+        }
+        else if "$mdf_autoinstall" != "1" {
+            di as txt   "  Updating is switched off (mdf_autoinstall = 0)."
+        }
+        else {
+            di as txt   "  The update could not be downloaded (no connection?)."
+        }
         di as txt   "  Running on anyway would build or process this project with an older"
         di as txt   "  framework than the one this Master was written for. Nothing was done."
         di as result`"  FIX: net install mdf, from("$mdf_source") replace"'

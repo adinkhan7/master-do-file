@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 11.0.0  28sep2026}{...}
+{* *! version 11.1.0  29sep2026}{...}
 {vieweralsosee "[R] net" "help net"}{...}
 {viewerjumpto "Syntax" "mdf##syntax"}{...}
 {viewerjumpto "Description" "mdf##description"}{...}
@@ -84,7 +84,7 @@ than by Master, and replace DO files those projects used to carry:
 {synoptline}
 
 {pstd}
-{bf:The project folder.} A project created by 11.0.0 has eight folders in the
+{bf:The project folder.} A project created by 11.x has eight folders in the
 order the work flows: {bf:01_Questionnaire}, {bf:02_CAPI}, {bf:03_Data},
 {bf:04_Others}, {bf:05_Processing} (the Processing DO, with {bf:01_Do Files},
 {bf:02_Translation} and {bf:03_Data} inside it), {bf:06_HFC},
@@ -107,7 +107,7 @@ three {it:clean} stops — Run 1, the CAPI pause and the Ghost Run pause — set
 {bf:$mdf_required}. An installed framework {it:older} than that is updated, and
 if it cannot be the run stops before doing anything. One {it:newer} than that
 is a warning and the run continues, which is how a 10.2.0 project keeps working
-on a machine with 11.0.0. Set {bf:$mdf_autoinstall 0} to suppress updating.
+on a machine with 11.1.0. Set {bf:$mdf_autoinstall 0} to suppress updating.
 
 {pstd}
 {bf:clear all and the helpers.} Every SurveyCTO import DO issues {cmd:clear all},
@@ -115,13 +115,25 @@ which drops programs and wipes Mata but leaves globals standing. The helpers are
 ado files on the adopath, so Stata reloads them on demand.
 
 {pstd}
-{bf:Where a generated DO file runs.} Inside a project it finds the project's
-{bf:.hfc_root} and runs as part of it. Inside a Deliverables package it finds
-{bf:02_Import & Raw files/} around it and rebuilds the cleaned dataset into
-{bf:04_Cleaned Data/}. Anywhere else it runs on the {bf:.dta} file(s) beside it,
-writing to {bf:MDF_Output/}. In the last two the framework need not be
-installed. It stops rather than guess: no dataset, a count that does not match,
-or a dataset it cannot identify by name ends the run naming what it found.
+{bf:Where a generated DO file runs.} Its {bf:0. INITIALISE} block searches upward
+from the working directory for its Deliverables package (which holds
+{bf:_mdf/mdf_runtime.do}) or its project ({bf:.hfc_root}), and accepts what it finds
+only if it is {it:its own} project, by name. In a project, {cmd:mdf_bootstrap} loads
+the directory file; in a package, the package's runtime loads the package's own
+settings ({bf:_mdf/mdf_package.do}) and checks the raw data by name and by
+{cmd:datasignature}. Neither ever takes a context left in the Stata session by
+another project or package. Anywhere else the Processing, Labeling, Translation and
+Audio DOs stop and say so; the HFC DO still runs on the {bf:.dta} file(s) beside it,
+writing to {bf:MDF_Output/}.
+
+{pstd}
+{bf:What an analyst edits.} Every generated DO file marks its sections
+{bf:[SAFE TO EDIT]} or {bf:[MDF GENERATED - DO NOT EDIT]}. Manual labels go in
+{bf:01_Labeling.do} (MANUAL LABELING), manual translation corrections in
+{bf:02_Translation.do} (MANUAL TRANSLATION OVERRIDES). The engines behind them are
+framework files in {bf:01_Do Files/_mdf/}, rewritten on every run. The file headers
+take {bf:$project_lead}, {bf:$project_email}, {bf:$organisation} and
+{bf:$project_description} from Section 0.
 
 {pstd}
 {bf:The working directory.} Stata does not tell a running DO file where it is
@@ -135,8 +147,11 @@ otherwise use File > Change working directory.
 {bf:08_Deliverables/}: {bf:01_CAPI & Questionnaire}, {bf:02_Import & Raw files},
 {bf:03_Processing Files} and {bf:04_Cleaned Data} — once per dataset, under
 {bf:NN_<dataset>/}, when there are several. Copied anywhere, the Processing DO
-inside rebuilds the cleaned dataset with no project and no framework installed.
-A file that cannot be copied in is named and the build ends with an error.
+inside rebuilds the cleaned dataset with no project and no framework installed,
+from the package's own runtime and settings, and reports whether the result is
+identical to the cleaned dataset shipped with it (REPRODUCED). A file that cannot
+be copied in, or a path too long for Windows, is named and the build ends with an
+error.
 
 {pstd}
 {bf:Reproducible cleaning.} Each dataset block of the Processing DO fixes
