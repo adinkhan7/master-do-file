@@ -1,5 +1,5 @@
 *! mdf.ado — Master DO File framework
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  `mdf run` executes every stage in order. Master normally lists the stages
 *!  itself instead, so the pipeline is visible and any one stage can be re-run
@@ -10,8 +10,8 @@ program define mdf, rclass
     gettoken _sub _rest : 0
 
     if `"`_sub'"' == "version" | `"`_sub'"' == "" {
-        di as result "mdf 11.1.0"
-        return local version "11.1.0"
+        di as result "mdf 11.1.1"
+        return local version "11.1.1"
         exit 0
     }
 
@@ -40,5 +40,5 @@ program define mdf, rclass
     mdf_keys
     mdf_deliverables
 
-    return local version "11.1.0"
+    return local version "11.1.1"
 end

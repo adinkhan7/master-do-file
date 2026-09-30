@@ -1,5 +1,5 @@
 *! mdf_instruments.ado — Master DO File pipeline stage 14 of 19
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  CAPI subfolders, instrument archiving, translation folders
 
@@ -148,16 +148,21 @@ program define mdf_instruments
     *  SECTION 21  PER-DATASET TRANSLATION FOLDERS
     *==============================================================================*
 
-    di as result _n "--- Translation folders (per dataset) ---"
+    *  One dataset: files go straight into 01_Exported/ and 02_Translated/, made
+    *  with the rest of the tree. Only several datasets get a subfolder each, to
+    *  keep their files apart.
+    di as result _n "--- Translation folders ---"
 
-    forvalues _tz = 1/$actual_n_dta {
-        local _tz_base "${auto_dsname_`_tz'}"
-        if "`_tz_base'" == "" {
-            di as error "  DS`_tz': dataset name unresolved — skipping translation folders."
-            continue
+    if $actual_n_dta > 1 {
+        forvalues _tz = 1/$actual_n_dta {
+            local _tz_base "${auto_dsname_`_tz'}"
+            if "`_tz_base'" == "" {
+                di as error "  DS`_tz': dataset name unresolved — skipping translation folders."
+                continue
+            }
+            _hfc_mkdir "$trans_exported_dir/`_tz_base'"
+            _hfc_mkdir "$trans_translated_dir/`_tz_base'"
         }
-        _hfc_mkdir "$trans_exported_dir/`_tz_base'"
-        _hfc_mkdir "$trans_translated_dir/`_tz_base'"
     }
     di as result "  Exported → $trans_exported_dir"
     di as result "  Return translated files to → $trans_translated_dir"

@@ -1,5 +1,5 @@
 *! mdf_validate.ado — Master DO File pipeline stage 2 of 19
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  Section 0 sanity checks and switch defaults
 
@@ -49,9 +49,39 @@ program define mdf_validate
     local _rq = subinstr("$mdf_required", ".", " ", .)
     local _rq1 = real(word("`_rq'", 1))
     local _rq2 = real(word("`_rq'", 2))
-    if missing(`_rq1') | `_rq1' < 11 | (`_rq1' == 11 & (missing(`_rq2') | `_rq2' < 1)) {
-        foreach _g in project_lead project_email organisation project_description {
+    local _rq3 = real(word("`_rq'", 3))
+    foreach _n in _rq1 _rq2 _rq3 {
+        if missing(``_n'') local `_n' 0
+    }
+    local _rqn = `_rq1' * 10000 + `_rq2' * 100 + `_rq3'
+    if `_rqn' < 110100 {
+        foreach _g in project_analyst project_email organisation project_description {
             global `_g' ""
+        }
+    }
+
+    *  ── Masters written before 11.1.1 use the earlier names ─────────────────────
+    *  project_lead became project_analyst and hfc_openended_vars* became
+    *  exp_openended_vars* in 11.1.1. A Master pinned to an earlier framework
+    *  still sets the old names, and the framework reads only the new ones, so
+    *  its values are carried across here — otherwise a live project would lose
+    *  its open-ended variable list and export every text variable instead.
+    *  A Master at 11.1.1 or later sets the new names itself; what an earlier
+    *  Master left in the session under the old ones is never read for it.
+    if `_rqn' < 110101 {
+        local _legacy 0
+        if `_rqn' >= 110100 {
+            if `"$project_lead"' != "" local _legacy 1
+            global project_analyst `"$project_lead"'
+        }
+        foreach _s in "" "_1" "_2" "_3" {
+            if `"${hfc_openended_vars`_s'}"' != "" local _legacy 1
+            global exp_openended_vars`_s' `"${hfc_openended_vars`_s'}"'
+        }
+        if `_legacy' {
+            di as txt "  NOTE: this Master uses the earlier setting names project_lead and"
+            di as txt "        hfc_openended_vars*. They are read as project_analyst and"
+            di as txt "        exp_openended_vars*. Rename them in Section 0 when convenient."
         }
     }
 end

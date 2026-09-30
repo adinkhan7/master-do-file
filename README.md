@@ -22,7 +22,7 @@ global run_import           1
 global run_labeling         1
 ...
 global run_deliverables     1                    // 08_Deliverables/ — client handover package
-global mdf_required         "11.1.0"
+global mdf_required         "11.1.1"
 
 *  Everything below is for system use, no need to make any change.
 mdf_setup         //  helper programs, ROOT resolution, framework version check
@@ -43,7 +43,7 @@ re-run from the Command window while debugging. `mdf run` does the same thing in
 
 ```
 <Project>/
-├─ Master_DO_File_11.1.0.do
+├─ Master_DO_File_11.1.1.do
 ├─ README.md                         generated; explains the project
 ├─ 01_Questionnaire/                 questionnaire documents        (NN_<dataset>/ per dataset)
 ├─ 02_CAPI/                          SurveyCTO form(s); Archive/    (NN_<dataset>/ per dataset)
@@ -70,9 +70,11 @@ sentinel; v11 reads it and runs a v10 project (`01_Survey_Instruments/`, `02_Dat
 ## The DO files an analyst works in
 
 `<Project>_Processing.do`, `01_Labeling.do`, `02_Translation.do` and `03_Audio.do` are short and read
-top to bottom: a header (project, purpose, author, organisation, contact, date — from Section 0's
-`project_lead`, `project_email`, `organisation`, `project_description`; an unset field is left out),
-one `0. INITIALISE` block, then the stages in the order they run. Every section is marked
+top to bottom: a header (project, purpose, project analyst, organisation, contact, date — from Section 0's
+`project_analyst`, `project_email`, `organisation`, `project_description`; an unset field is left out),
+a `DIRECTORY REFERENCE` (Processing and HFC DOs: the path globals — `$clean_dir`, `$processing_dir`, `$hfc_run_dir`
+and the rest — with the folder each stands for, so an output can be sent somewhere by hand without looking the
+name up), one `0. INITIALISE` block, then the stages in the order they run. Every section is marked
 **[SAFE TO EDIT]** or **[MDF GENERATED - DO NOT EDIT]**:
 
 | file | where your own code goes |
@@ -164,7 +166,7 @@ the installed version differs from the one Master pins in `$mdf_required`.
 
 ## Versioning
 
-Master pins the framework it was written against: `global mdf_required "11.1.0"`.
+Master pins the framework it was written against: `global mdf_required "11.1.1"`.
 
 - **Installed framework older than Master** → updated from GitHub; if that is impossible, the run
   stops before doing anything. An older framework cannot know the folders and stages a newer Master

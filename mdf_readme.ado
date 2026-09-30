@@ -1,5 +1,5 @@
 *! mdf_readme.ado — Master DO File pipeline stage 5 of 19
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  write the project README
 *!
@@ -91,7 +91,8 @@ program define mdf_readme
         file write `_mf' "| run_processing | produce the cleaned dataset |" _n
         file write `_mf' "| run_hfc | run the checks and write the report |" _n
         file write `_mf' "| run_audio | draw the audio back-check sample |" _n
-        file write `_mf' "| run_deliverables | build the client handover package in `V'/ |" _n _n
+        file write `_mf' "| run_deliverables | build the client handover package in `V'/ (see Deliverables below) |" _n
+        file write `_mf' "| post_field | fieldwork is over: re-run the last run folder instead of starting a new one (see Post-field mode below) |" _n _n
         file write `_mf' "**Labeling and applying translations both happen inside processing**, per" _n
         file write `_mf' "dataset, immediately before that dataset is cleaned. Setting run_labeling = 1" _n
         file write `_mf' "with run_processing = 0 therefore labels nothing, and the run says so." _n _n
@@ -99,11 +100,18 @@ program define mdf_readme
         file write `_mf' "on every run, because labeling reads from there and dataset detection" _n
         file write `_mf' "depends on it." _n _n
         file write `_mf' "## The open-ended translation round trip" _n _n
-        file write `_mf' "Set exportopenended = 1 to send text out. Files land in" _n
-        file write `_mf' "`T'/01_Exported/<dataset>/. Return the completed file to" _n
-        file write `_mf' "`T'/02_Translated/<dataset>/ under any filename, keeping the" _n
-        file write `_mf' "key and variable columns untouched, and fill the translated column." _n
-        file write `_mf' "inputcorrection = 1 applies everything found there on the next run." _n _n
+        file write `_mf' "Set exportopenended = 1 to send text out. Name the variables to send in" _n
+        file write `_mf' "exp_openended_vars (one dataset) or exp_openended_vars_1, _2, _3 (one list per" _n
+        file write `_mf' "dataset, when there are several); wildcards such as q5_* work, and left empty" _n
+        file write `_mf' "every text variable is sent." _n _n
+        file write `_mf' "With ONE dataset the files sit directly in `T'/01_Exported/ and" _n
+        file write `_mf' "`T'/02_Translated/. With several datasets each has its own subfolder in both," _n
+        file write `_mf' "`T'/01_Exported/<dataset>/ and `T'/02_Translated/<dataset>/, so their files" _n
+        file write `_mf' "stay apart. Return the completed file to the matching 02_Translated folder under" _n
+        file write `_mf' "any filename, keeping the key and variable columns untouched, and fill the" _n
+        file write `_mf' "translated column. inputcorrection = 1 applies everything found there on the" _n
+        file write `_mf' "next run. (A one-dataset project that already has files in" _n
+        file write `_mf' "`T'/02_Translated/<dataset>/ keeps working: those are applied too.)" _n _n
         file write `_mf' "Only rows not previously sent are exported. Set oe_export_all = 1 to send" _n
         file write `_mf' "everything again." _n _n
         file write `_mf' "You can leave the SurveyCTO form open in Excel while running; labeling is" _n
@@ -139,6 +147,8 @@ program define mdf_readme
         file write `_mf' "| capi_language | the ODKSplit label language, e.g. English |" _n
         file write `_mf' "| capi_verbose | 1 prints the ODKSplit variable list, 0 labels silently |" _n
         file write `_mf' "| oe_export_all | 0 exports only rows never sent before, 1 re-exports everything |" _n
+        file write `_mf' "| exp_openended_vars, exp_openended_vars_1..3 | the open-ended variables to export for translation: exp_openended_vars for one dataset, the numbered lists for several; empty = every text variable |" _n
+        file write `_mf' "| project_analyst, project_email, organisation, project_description | printed in the header of every generated DO file; a field left empty is left out |" _n
         file write `_mf' "| audio_drop_before | leave empty to drop interviews before yesterday, or give a fixed YYYYMMDD |" _n
         file write `_mf' "| audio_keep_enums | leave empty to sample every enumerator, or give space-separated numeric enum IDs, e.g. 1 2 5 |" _n
         file write `_mf' "| audio_seed | fixes the sample so the same run reproduces the same draw |" _n
@@ -183,8 +193,8 @@ program define mdf_readme
         file write `_mf' "When the framework's template for one of these files changes, Master" _n
         file write `_mf' "writes the new version beside yours as <file>.new. For the Processing DO" _n
         file write `_mf' "the .new already carries your cleaning code; review it, then replace your" _n
-        file write `_mf' "file with it. The header of each file (author, organisation, contact," _n
-        file write `_mf' "description) comes from the project details in Section 0." _n
+        file write `_mf' "file with it. The header of each file (project analyst, organisation," _n
+        file write `_mf' "contact, description) comes from the project details in Section 0." _n
         file write `_mf' "" _n
         file write `_mf' "## Running a DO file on its own" _n
         file write `_mf' "" _n
@@ -234,6 +244,26 @@ program define mdf_readme
         file write `_mf' "" _n
         file write `_mf' "Inside this project nothing changes: the project is found first and every" _n
         file write `_mf' "file behaves exactly as it always has." _n
+        file write `_mf' "" _n
+        file write `_mf' "## Post-field mode" _n
+        file write `_mf' "" _n
+        file write `_mf' "Set post_field = 1 in Section 0 once fieldwork is over and no new export will" _n
+        file write `_mf' "arrive. Set it back to 0 to return to normal dated runs." _n
+        file write `_mf' "" _n
+        file write `_mf' "- **post_field = 0 (normal).** Each dated run creates today's raw-data and" _n
+        file write `_mf' "  run folders, imports the export, processes it, and stamps its outputs" _n
+        file write `_mf' "  with today's date." _n
+        file write `_mf' "- **post_field = 1.** Master re-runs the last run folder that holds data. It" _n
+        file write `_mf' "  creates no new folder and imports nothing (run_import is switched off)." _n
+        file write `_mf' "  Everything it writes is stamped with THAT folder's date, so a re-run" _n
+        file write `_mf' "  reproduces the same files in place instead of scattering new dated" _n
+        file write `_mf' "  ones. The run log alone keeps the real calendar date, so earlier logs" _n
+        file write `_mf' "  are not overwritten." _n
+        file write `_mf' "" _n
+        file write `_mf' "Use it for the cleaning and delivery work after the last data has been" _n
+        file write `_mf' "downloaded: re-running the Processing DO, the HFC, or building the" _n
+        file write `_mf' "Deliverables. If no run folder in `H'/ holds any data, the run stops and" _n
+        file write `_mf' "says so: set post_field = 0, put the export in `D'/ and run once." _n
         file write `_mf' "" _n
         file write `_mf' "## Deliverables" _n
         file write `_mf' "" _n

@@ -1,5 +1,5 @@
 *! mdf_import.ado — Master DO File pipeline stage 10 of 19
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  carry the import DO forward, fingerprint it, import
 
@@ -278,7 +278,7 @@ program define mdf_import
             global meta_front_`_i' ""
             global meta_ids_`_i'   ""
             global tail_`_i'       ""
-            global hfc_openended_vars_`_i' ""
+            global exp_openended_vars_`_i' ""
             global gate_vars_`_i'  ""
         }
         di as result "Architecture Guard: Multi-dataset overrides wiped for single-dataset run."

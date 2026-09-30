@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 11.1.0  29sep2026}{...}
+{* *! version 11.1.1  30sep2026}{...}
 {vieweralsosee "[R] net" "help net"}{...}
 {viewerjumpto "Syntax" "mdf##syntax"}{...}
 {viewerjumpto "Description" "mdf##description"}{...}
@@ -132,7 +132,7 @@ writing to {bf:MDF_Output/}.
 {bf:01_Labeling.do} (MANUAL LABELING), manual translation corrections in
 {bf:02_Translation.do} (MANUAL TRANSLATION OVERRIDES). The engines behind them are
 framework files in {bf:01_Do Files/_mdf/}, rewritten on every run. The file headers
-take {bf:$project_lead}, {bf:$project_email}, {bf:$organisation} and
+take {bf:$project_analyst}, {bf:$project_email}, {bf:$organisation} and
 {bf:$project_description} from Section 0.
 
 {pstd}

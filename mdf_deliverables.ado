@@ -1,5 +1,5 @@
 *! mdf_deliverables.ado — Master DO File pipeline stage 19 of 19
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.1   github.com/adinkhan7/master-do-file
 *!
 *!  build the client handover package (ADR-059, amending ADR-057)
 *!
@@ -394,25 +394,30 @@ program define mdf_deliverables
             }
         }
 
-        *  Translation: this dataset's folders. Returned files lying loose in
-        *  02_Translated/ are what the apply step falls back to when the
-        *  dataset's folder is empty, so they travel in the same place.
+        *  Translation: this dataset's files. With several datasets each has a
+        *  folder under 01_Exported/ and 02_Translated/, and returned files lying
+        *  loose in 02_Translated/ are what the apply step falls back to when the
+        *  dataset's folder is empty. With one dataset the files sit directly in
+        *  those folders; any an earlier build filed under the dataset's own folder
+        *  are carried too, the legacy ones first so a newer file wins a name clash.
         local _ntr 0
         foreach _leg in "01_Exported" "02_Translated" {
-            local _td "$translation_dir/`_leg'/`_nm'"
-            local _tf ""
-            cap local _tf : dir "`_td'" files "*", respectcase
+            local _srcs `""$translation_dir/`_leg'/`_nm'""'
+            if `_nds' == 1 local _srcs `""$translation_dir/`_leg'/`_nm'" "$translation_dir/`_leg'""'
             local _nleg 0
             *  Flat in the package: it carries one dataset, and the dataset's
             *  name twice on the path pushed real files past 260 characters.
-            foreach _x of local _tf {
-                if substr(`"`_x'"', 1, 1) == "~" continue
-                _mdf_dlv_copy `"`_td'/`_x'"' `"`_C'/02_Translation/`_leg'/`_x'"'
-                if r(ok) local _nleg = `_nleg' + 1
+            foreach _td of local _srcs {
+                local _tf ""
+                cap local _tf : dir "`_td'" files "*", respectcase
+                foreach _x of local _tf {
+                    if substr(`"`_x'"', 1, 1) == "~" continue
+                    _mdf_dlv_copy `"`_td'/`_x'"' `"`_C'/02_Translation/`_leg'/`_x'"'
+                    if r(ok) local _nleg = `_nleg' + 1
+                }
             }
-            if "`_leg'" == "02_Translated" & `_nleg' == 0 {
+            if "`_leg'" == "02_Translated" & `_nleg' == 0 & `_nds' > 1 {
                 local _pat "*`_nm'*.xlsx"
-                if `_nds' == 1 local _pat "*.xlsx"
                 local _tf ""
                 cap local _tf : dir "$trans_translated_dir" files "`_pat'", respectcase
                 foreach _x of local _tf {
