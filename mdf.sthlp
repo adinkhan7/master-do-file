@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 11.1.1  30sep2026}{...}
+{* *! version 11.1.2  03oct2026}{...}
 {vieweralsosee "[R] net" "help net"}{...}
 {viewerjumpto "Syntax" "mdf##syntax"}{...}
 {viewerjumpto "Description" "mdf##description"}{...}
@@ -129,7 +129,9 @@ writing to {bf:MDF_Output/}.
 {pstd}
 {bf:What an analyst edits.} Every generated DO file marks its sections
 {bf:[SAFE TO EDIT]} or {bf:[MDF GENERATED - DO NOT EDIT]}. Manual labels go in
-{bf:01_Labeling.do} (MANUAL LABELING), manual translation corrections in
+{bf:01_Labeling.do} (MANUAL LABELING), variables odksplit should see under a short
+temporary name in {bf:01_Labeling.do} (ODKSPLIT NAME OVERRIDES; names of 29+
+characters need no listing), manual translation corrections in
 {bf:02_Translation.do} (MANUAL TRANSLATION OVERRIDES). The engines behind them are
 framework files in {bf:01_Do Files/_mdf/}, rewritten on every run. The file headers
 take {bf:$project_analyst}, {bf:$project_email}, {bf:$organisation} and

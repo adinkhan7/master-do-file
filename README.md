@@ -22,7 +22,7 @@ global run_import           1
 global run_labeling         1
 ...
 global run_deliverables     1                    // 08_Deliverables/ — client handover package
-global mdf_required         "11.1.1"
+global mdf_required         "11.1.2"
 
 *  Everything below is for system use, no need to make any change.
 mdf_setup         //  helper programs, ROOT resolution, framework version check
@@ -43,7 +43,7 @@ re-run from the Command window while debugging. `mdf run` does the same thing in
 
 ```
 <Project>/
-├─ Master_DO_File_11.1.1.do
+├─ Master_DO_File_11.1.2.do
 ├─ README.md                         generated; explains the project
 ├─ 01_Questionnaire/                 questionnaire documents        (NN_<dataset>/ per dataset)
 ├─ 02_CAPI/                          SurveyCTO form(s); Archive/    (NN_<dataset>/ per dataset)
@@ -80,13 +80,35 @@ name up), one `0. INITIALISE` block, then the stages in the order they run. Ever
 | file | where your own code goes |
 |---|---|
 | `<Project>_Processing.do` | `2. FIELD CLEANING` and `3. POST-FIELD CLEANING`, per dataset |
-| `01_Labeling.do` | `2. MANUAL LABELING` — applied after the CAPI labels |
+| `01_Labeling.do` | `1. ODKSPLIT NAME OVERRIDES` — variables odksplit should see under a short name (see below); `3. MANUAL LABELING` — applied after the CAPI labels |
 | `02_Translation.do` | `2. MANUAL TRANSLATION OVERRIDES` — applied after the returned files |
 | `02_<Project>_HFC.do` | `CHECK SETTINGS` and `CUSTOM CHECKS` |
 
 The labeling and translation engines are framework files in `01_Do Files/_mdf/`, rewritten on every
 run. Master never overwrites a file you edit; when its template changes it writes `<file>.new` beside
 it, and the Processing DO's `.new` already carries your cleaning.
+
+### Variable names too long for odksplit
+
+`odksplit` names Stata macros after each form field (`<field>_y`, `<field>_ch`, `<field>_l1`,
+`<field>_<choice>la`), and a macro name stops at 31 characters. A field of 29 or more characters stops
+it with `local macro name ... too long`; a select field whose `<field>_<choice>la` passes 31 loses that
+choice's label without a word. Stata itself accepts names up to 32, so these variables are legal in
+the data.
+
+The labeling engine handles both. For the one `odksplit` call, each such variable takes a short
+temporary name (`_mdf001`, `_mdf002`, ... in dataset order) in the working copies of the data and the
+form; straight after, it gets its own name back with the labels `odksplit` gave the short one. The log
+lists every pair. The real form and the archived raw data are never changed, and a project with no such
+variable is processed exactly as before. To have `odksplit` treat another variable the same way, list it
+in `01_Labeling.do`, section `1. ODKSPLIT NAME OVERRIDES`:
+
+```stata
+global odksplit_rename "var_one var_two"
+```
+
+A listed variable that does not exist, a short name already in use, or a name that does not come back
+stops the run.
 
 ## Where a generated DO file runs
 
@@ -166,7 +188,7 @@ the installed version differs from the one Master pins in `$mdf_required`.
 
 ## Versioning
 
-Master pins the framework it was written against: `global mdf_required "11.1.1"`.
+Master pins the framework it was written against: `global mdf_required "11.1.2"`.
 
 - **Installed framework older than Master** → updated from GitHub; if that is impossible, the run
   stops before doing anything. An older framework cannot know the folders and stages a newer Master

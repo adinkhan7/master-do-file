@@ -1,5 +1,5 @@
 *! mdf_deliverables.ado — Master DO File pipeline stage 19 of 19
-*! version 11.1.1   github.com/adinkhan7/master-do-file
+*! version 11.1.2   github.com/adinkhan7/master-do-file
 *!
 *!  build the client handover package (ADR-059, amending ADR-057)
 *!
@@ -365,7 +365,7 @@ program define mdf_deliverables
                 _mdf_dlv_copy "$mdf_rt_dir/`_e'.do" `"`_R'/`_e'.do"'
                 if r(ok) local _rtn = `_rtn' + 1
             }
-            foreach _a in _mdf_rt_package _hfc_abort _hfc_pause _hfc_mkdir mdf_core_vars mdf_finalise {
+            foreach _a in _mdf_rt_package _hfc_abort _hfc_pause _hfc_mkdir mdf_core_vars mdf_finalise _mdf_odk_names {
                 local _fn ""
                 cap findfile `_a'.ado
                 if !_rc local _fn `"`r(fn)'"'

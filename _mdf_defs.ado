@@ -1,5 +1,5 @@
 *! _mdf_defs.ado — the Mata layer for the Master DO File framework
-*! version 11.1.1   github.com/adinkhan7/master-do-file
+*! version 11.1.2   github.com/adinkhan7/master-do-file
 *!
 *!  Loaded on demand by _mdf_load.ado. Never run this file directly.
 *!
@@ -1299,6 +1299,49 @@ void write_labeling_module(
     write_labeling_part2(fh, q, bt, ap, dol, pname)
 }
 
+//  ODKSPLIT NAMES (ADR-063). odksplit names Stata macros after each form
+//  field, and a macro name stops at 31 characters, so a field of 29+
+//  characters stopped odksplit and the whole dataset went unlabeled. Such a
+//  variable is known to odksplit by a short temporary name for this one call;
+//  _mdf_odk_names does the renaming, in the two working copies only. The
+//  analyst's own list (odksplit_rename, 01_Labeling.do) is consumed here and
+//  cleared, so one dataset's list can never reach the next. A failure stops
+//  the run, after the working copies are erased: they sit in the raw-data
+//  folder, where a stray .dta would be read as data on the next run.
+void write_odk_names_prepare(real scalar fh, string scalar q, string scalar bt,
+                             string scalar ap, string scalar dol,
+                             string scalar sfx, string scalar ind)
+{
+    fput(fh, ind + "*  ODKSPLIT NAMES — a field name of 29+ characters is too long for the")
+    fput(fh, ind + "*  macros odksplit builds from it. Such variables, and any listed in")
+    fput(fh, ind + "*  01_Labeling.do (odksplit_rename), take a short temporary name for")
+    fput(fh, ind + "*  this one call only; their names are restored straight after.")
+    fput(fh, ind + "cap noi _mdf_odk_names prepare, data(" + q + "temp_data" + sfx + ".dta" + q + ") form(" + q + "temp_capi" + sfx + ".xlsx" + q + ") declared(" + q + dol + "odksplit_rename" + q + ") ds(" + bt + "_ds" + ap + ")")
+    fput(fh, ind + "local _odk_rc = _rc")
+    fput(fh, ind + "local _odk_map " + bt + q + bt + "r(map)" + ap + q + ap)
+    fput(fh, ind + "local _odk_multi " + bt + q + bt + "r(multi)" + ap + q + ap)
+    fput(fh, ind + "global odksplit_rename " + q + q)
+    fput(fh, ind + "if " + bt + "_odk_rc" + ap + " {")
+    fput(fh, ind + "    cap erase " + q + "temp_capi" + sfx + ".xlsx" + q)
+    fput(fh, ind + "    cap erase " + q + "temp_data" + sfx + ".dta" + q)
+    fput(fh, ind + "    cd " + q + dol + "{ROOT}" + q)
+    fput(fh, ind + "    exit " + bt + "_odk_rc" + ap)
+    fput(fh, ind + "}")
+    fput(fh, "")
+}
+
+void write_odk_names_restore(real scalar fh, string scalar q, string scalar bt,
+                             string scalar ap, string scalar ind)
+{
+    fput(fh, ind + "*  Original names back, with the labels odksplit gave the short ones.")
+    fput(fh, ind + "if " + bt + "_odksplit_rc" + ap + " == 0 & " + bt + q + bt + "_odk_map" + ap + q + ap + " != " + q + q + " {")
+    fput(fh, ind + "    cap noi _mdf_odk_names restore, map(" + bt + "_odk_map" + ap + ") multi(" + bt + "_odk_multi" + ap + ") ds(" + bt + "_ds" + ap + ")")
+    fput(fh, ind + "    local _odk_rc = _rc")
+    fput(fh, ind + "    if " + bt + "_odk_rc" + ap + " exit " + bt + "_odk_rc" + ap)
+    fput(fh, ind + "}")
+    fput(fh, "")
+}
+
 void write_odksplit_call(real scalar fh, string scalar q, string scalar bt,
                          string scalar ap, string scalar dol,
                          string scalar sfx, string scalar form, string scalar ind)
@@ -1313,6 +1356,7 @@ void write_odksplit_call(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "cap copy " + q + form + q + " " + q + "temp_capi" + sfx + ".xlsx" + q + ", replace")
     fput(fh, ind + "cap copy " + q + bt + "_f" + ap + q + " " + q + "temp_data" + sfx + ".dta" + q + ", replace")
     fput(fh, "")
+    write_odk_names_prepare(fh, q, bt, ap, dol, sfx, ind)
     fput(fh, ind + bt + "_odk_cap" + ap + " odksplit,                              ///")
     fput(fh, ind + "    survey(" + q + "temp_capi" + sfx + ".xlsx" + q + ")        ///")
     fput(fh, ind + "    data(" + q + "temp_data" + sfx + ".dta" + q + ")           ///")
@@ -1323,6 +1367,7 @@ void write_odksplit_call(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "cap erase " + q + "temp_data" + sfx + ".dta" + q)
     fput(fh, ind + "cd " + q + dol + "{ROOT}" + q)
     fput(fh, "")
+    write_odk_names_restore(fh, q, bt, ap, ind)
     fput(fh, ind + "di as result " + q + "  odksplit completed in " + q + " %5.1f (clock(" + q + bt + "c(current_time)" + ap + q + ", " + q + "hms" + q + ") - " + bt + "_ods_t0" + ap + ") / 1000 " + q + " seconds." + q)
     fput(fh, "")
     fput(fh, ind + "if " + bt + "_odksplit_rc" + ap + " {")
@@ -3867,6 +3912,26 @@ void _per_ds_slots(real scalar fh, string scalar test, string scalar nds)
     fput(fh, "")
 }
 
+//  The odksplit_rename slot of 01_Labeling.do: emptied first, then one line
+//  per dataset, so a list belongs to its own dataset and to no other (the
+//  engine also clears it once read). One dataset needs only the first line.
+void _odk_rename_slots(real scalar fh, string scalar q, string scalar bt,
+                       string scalar ap, string scalar nds)
+{
+    real scalar _k, nb
+    string scalar ks, nm
+    fput(fh, "")
+    fput(fh, "global odksplit_rename " + q + q)
+    nb = strtoreal(nds)
+    if (nb < . & nb > 1) {
+        for (_k = 1; _k <= nb; _k++) {
+            ks = strofreal(_k)
+            nm = st_global("auto_dsname_" + ks)
+            fput(fh, "if " + q + bt + "_mdf_ds" + ap + q + " == " + q + ks + q + " global odksplit_rename " + q + q + "    // DS" + ks + (nm != "" ? ": " + nm : ""))
+        }
+    }
+}
+
 void write_labeling_do(string scalar dodir, string scalar tver, string scalar pname,
                        string scalar q, string scalar bt, string scalar ap,
                        string scalar dol, string scalar nds)
@@ -3887,12 +3952,21 @@ void write_labeling_do(string scalar dodir, string scalar tver, string scalar pn
     fput(fh, "args _mdf_ds")
     fput(fh, "if " + q + bt + "_mdf_ds" + ap + q + " == " + q + q + " local _mdf_ds 1")
     write_init_block(fh, q, bt, ap, dol, pname, "labeling", 0)
-    mdf_gen_section(fh, "1. CAPI LABELS",
+    mdf_edit_section(fh, "ODKSplit Name Overrides", "1. ODKSPLIT NAME OVERRIDES",
+        ("odksplit stops when a variable's name is too long for the Stata" \
+         "macros it builds (" + q + "local macro name ... too long" + q + "). MDF finds" \
+         "those itself: for odksplit only, each takes a short temporary name" \
+         "(_mdf001, ...) and gets its own name back, with its labels, straight" \
+         "after. List here any other variable odksplit should treat the same" \
+         "way; the run stops if a listed variable does not exist. For example:" \
+         "    global odksplit_rename " + q + "var_one var_two" + q))
+    _odk_rename_slots(fh, q, bt, ap, nds)
+    mdf_gen_section(fh, "2. CAPI LABELS",
         ("Loads the dataset and applies the form's value and variable labels" \
          "with odksplit (framework code: 01_Do Files/_mdf/mdf_labeling.do)."))
     fput(fh, "do " + q + dol + "mdf_rt_dir/mdf_labeling.do" + q + " " + bt + "_mdf_ds" + ap)
     fput(fh, "if " + q + dol + "hfc_label_ok" + q + " != " + q + "1" + q + " exit    // no data loaded: nothing to label")
-    mdf_edit_section(fh, "Manual Labeling", "2. MANUAL LABELING",
+    mdf_edit_section(fh, "Manual Labeling", "3. MANUAL LABELING",
         ("Labels the CAPI form cannot supply: variables made in the field," \
          "other-specify and repeat-group variables, clearer wording. Applied" \
          "after the CAPI labels, every time the data are processed, in the" \

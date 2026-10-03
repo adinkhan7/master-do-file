@@ -1,5 +1,5 @@
 *! mdf_readme.ado — Master DO File pipeline stage 5 of 19
-*! version 11.1.1   github.com/adinkhan7/master-do-file
+*! version 11.1.2   github.com/adinkhan7/master-do-file
 *!
 *!  write the project README
 *!
@@ -185,6 +185,10 @@ program define mdf_readme
         file write `_mf' "- Cleaning rules: the Processing DO, sections 2 (field cleaning) and 3" _n
         file write `_mf' "  (post-field cleaning), one pair per dataset." _n
         file write `_mf' "- Labels the CAPI form cannot supply: 01_Labeling.do, MANUAL LABELING." _n
+        file write `_mf' "- A variable odksplit cannot handle by its own name: 01_Labeling.do," _n
+        file write `_mf' "  ODKSPLIT NAME OVERRIDES. Names of 29+ characters are handled without" _n
+        file write `_mf' "  being listed: for odksplit only they take a short temporary name" _n
+        file write `_mf' "  (_mdf001, ...), and the log shows each one and its restoration." _n
         file write `_mf' "- Corrections the returned translation files do not carry:" _n
         file write `_mf' "  02_Translation.do, MANUAL TRANSLATION OVERRIDES." _n
         file write `_mf' "- Check thresholds and your own checks: the HFC DO, CHECK SETTINGS and" _n
