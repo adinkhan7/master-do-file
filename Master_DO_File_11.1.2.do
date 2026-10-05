@@ -26,10 +26,8 @@ net install bias_expo, from("https://raw.githubusercontent.com/adinkhan7/bias_ex
 cap noi net install export_hfc, from("https://raw.githubusercontent.com/adinkhan7/export_hfc/main/")
 net install recode_oth, from("https://raw.githubusercontent.com/ashikpydev/recode_oth/main/") replace
 cap noi ssc install odksplit
-
 *==============================================================================*
 *  Master DO File version 11.1.2
-
 *==============================================================================*
 clear all
 set more off
@@ -41,39 +39,42 @@ if c(stata_version) < 16 {
 
 *==============================================================================*
 *  SECTION 0   USER CONFIGURATION                    ← EDIT ONLY THIS SECTION
-
 *==============================================================================*
 
 *  ── Project ────────────────────────────────────────────────────────────────
-global project_name         "Monash WEE DiFine"
-global sample_size          2400
+global project_name         "Sample Project"
+global sample_size          9999
 
 *  ── Project details: shown in the header of every generated DO file ───────
 *  Leave a field "" to leave it out of the headers.
 global project_analyst      ""                   // e.g. "A. Analyst, Officer, Data Analytics"
 global project_email        ""                   // contact for the project's DO files
-global organisation         "Development Research Initiative (dRi)"
+global organisation         ""                   // Organization Name
 global project_description  ""                   // one line on the survey; "" = a standard line
 
 *  ── Stages to run (0 = skip, 1 = run) ──────────────────────────────────────
-global run_import           0                    // import DO file(s) from SurveyCTO
-global run_labeling         0                    // CAPI value labels — applied INSIDE Processing (needs run_processing 1)
+global run_import           1                    // import DO file(s) from SurveyCTO
+global run_labeling         1                    // CAPI value labels — applied INSIDE Processing (needs run_processing 1)
 global run_translation      0                    // 05_Processing/01_Do Files/02_Translation.do (open-ended round trip)
 global run_processing       1                    // 05_Processing/[Project]_Processing.do (cleaning)
 global run_hfc              0                    // 06_HFC/02_[Project]_HFC.do (the checks)
 global run_audio            0                    // 05_Processing/01_Do Files/03_Audio.do (audio sampling)
-global run_deliverables     0                    // 08_Deliverables/ (client handover package)
 
 *  ── Post-field mode ────────────────────────────────────────────────────────
 global post_field           0                    // 0 = field ongoing / 1 = fieldwork complete
+
+*  ── Deliverables Creation ──────────────────────────────────────────────────
+global run_deliverables     0                    // 08_Deliverables/ (client handover package)
 
 *  ── Import ─────────────────────────────────────────────────────────────────
 global import_fingerprint   1                    // 1 = check / 0 = skip
 
 *  ── CAPI / labeling ────────────────────────────────────────────────────────
-global capi_override        ""                   // leave "" to auto-detect the latest .xlsx in 02_CAPI/
+global capi_verbose         1                    // 1 = Show ODKSplit variable list / 0 = Silent labeling
 global capi_language        "English"            // Default language for ODKSplit
-global capi_verbose         0                    // 1 = Show ODKSplit variable list / 0 = Silent labeling
+global capi_override        ""                   // leave "" to auto-detect the latest .xlsx in 02_CAPI/
+
+
 
 *  ── Open-ended translation ─────────────────────────────────────────────────
 global exportopenended      0                    // 1 = Export text variables for translation / 0 = Skip
@@ -104,14 +105,14 @@ global timer_start          ""
 global timer_end            ""
 
 global meta_front_          1       ""
-global meta_ids_            1         ""
-global tail_                1             ""
+global meta_ids_            1       ""
+global tail_                1       ""
 global meta_front_          2       ""
-global meta_ids_            2         ""
-global tail_                2             ""
+global meta_ids_            2       ""
+global tail_                2       ""
 global meta_front_          3       ""
-global meta_ids_            3         ""
-global tail_                3             ""
+global meta_ids_            3       ""
+global tail_                3       ""
 
 *  ── Special-response codes (Response Bias check) ───────────────────────────
 global code_dk              -999                 // "Don't Know" response code
