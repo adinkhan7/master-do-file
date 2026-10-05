@@ -141,17 +141,28 @@ wrong place stops and says which folder it searched.
 ├─ 03_Processing Files/
 │  ├─ <Project>_Processing.do
 │  ├─ 01_Do Files/                      01_Labeling.do, 02_Translation.do
-│  │  └─ _mdf/                          the runtime: the engines the project ran, byte for byte,
+│  │  └─ _mdf/  (hidden)                the runtime: the engines the project ran, byte for byte,
 │  │                                    and mdf_package.do — the package's identity and settings
-│  ├─ 02_Translation/                   01_Exported/, 02_Translated/
+│  ├─ 02_Translation/                   the returned translation files (only if there are any)
 │  └─ 03_Data/                          your support files from 05_Processing/03_Data/
 ├─ 04_Cleaned Data/                     the cleaned dataset
 └─ README.md                            how the client rebuilds it
 ```
 
 With several datasets the same four folders appear once per dataset, under
-`08_Deliverables/NN_<dataset>/`, each carrying that dataset alone. The post-cleaning merge is not
-part of a per-dataset package.
+`08_Deliverables/NN_<dataset>/`, each carrying that dataset alone; its returned translation files
+sit in `02_Translation/NN_<dataset>/`. The post-cleaning merge is not part of a per-dataset package.
+
+`_mdf/` stays where it is because every Processing, Labeling and Translation DO since 11.1.0 finds its
+package by that path; it is hidden, as the project's own `_mdf/` is. Zip a package with File Explorer
+or 7-Zip — PowerShell's `Compress-Archive` leaves hidden folders out.
+
+**Debugging in the package.** The package's copy of the Processing DO opens each dataset's block with
+a line marked `LOAD DATASET INTO MEMORY`. Run section `0. INITIALISE` once, then that one line —
+`use "${mdf_raw_<project>}/<dataset>.dta", clear` — and the dataset's raw data is in memory, wherever
+the package has been moved. The global is set only by that project's package, so after another
+project's INITIALISE the line finds no file rather than the wrong one. The project's own Processing
+DO is not changed.
 
 No daily download folders, no HFC history, no keys, no logs, no Master.
 

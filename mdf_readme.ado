@@ -281,16 +281,19 @@ program define mdf_readme
         file write `_mf' "      02_Import & Raw files/     the raw dataset, its import DO and CSV" _n
         file write `_mf' "      03_Processing Files/       ${project_name}_Processing.do" _n
         file write `_mf' "        01_Do Files/             01_Labeling.do, 02_Translation.do" _n
-        file write `_mf' "          _mdf/                  the runtime: the engines this project ran," _n
+        file write `_mf' "          _mdf/  (hidden)        the runtime: the engines this project ran," _n
         file write `_mf' "                                 the package's settings (mdf_package.do)" _n
-        file write `_mf' "        02_Translation/          01_Exported/, 02_Translated/" _n
+        file write `_mf' "        02_Translation/          the returned translation files, if any" _n
         file write `_mf' "        03_Data/                 your support files from `PD'/" _n
         file write `_mf' "      04_Cleaned Data/           the cleaned dataset" _n
         file write `_mf' "      README.md                  how the client rebuilds it" _n
         file write `_mf' "" _n
         file write `_mf' "With more than one dataset the same four folders appear once per dataset," _n
-        file write `_mf' "under `V'/NN_<dataset>/, each holding only that dataset. The" _n
-        file write `_mf' "post-cleaning merge is not part of a per-dataset package." _n
+        file write `_mf' "under `V'/NN_<dataset>/, each holding only that dataset, its returned" _n
+        file write `_mf' "translation files in 02_Translation/NN_<dataset>/. The post-cleaning merge" _n
+        file write `_mf' "is not part of a per-dataset package. The package's copy of the Processing" _n
+        file write `_mf' "DO opens each dataset's block with a LOAD DATASET INTO MEMORY line, for" _n
+        file write `_mf' "stepping through the cleaning; the project's own file is not changed." _n
         file write `_mf' "" _n
         file write `_mf' "**How the client reproduces it.** Copy the folder anywhere, open" _n
         file write `_mf' "03_Processing Files/${project_name}_Processing.do in Stata and run it" _n

@@ -4122,6 +4122,77 @@ void write_package_settings()
     fclose(fh)
 }
 
+//  ── The package's copy of the Processing DO: a line that loads the data ──
+//  Deliverables only (ADR-064); the project's own file is never touched. Above
+//  dataset k's LOAD block goes one marked line that loads that dataset's raw
+//  data by itself, so an analyst stepping through the cleaning need not run
+//  everything above it. It names the file through a global only this project's
+//  package runtime sets (mdf_raw_<project>, by the package's INITIALISE), so it
+//  holds wherever the package is moved, and after another project's INITIALISE
+//  it finds no file rather than that project's file.
+string colvector _dlv_load_block(string scalar lbl, string scalar leaf,
+                                 string scalar shortnm)
+{
+    return((_rule("=") \
+        "* LOAD DATASET INTO MEMORY  —  " + lbl \
+        "*    SAFE TO RUN THIS LINE ALONE FOR DEBUGGING: select the  use  line below" \
+        "*    and press Ctrl+D. This dataset's raw data is then in memory, as the" \
+        "*    labeling step below receives it. All it needs is section 0. INITIALISE" \
+        "*    above, run once in this Stata session: that finds this package," \
+        "*    wherever it now is. A full run loads the same file again below." \
+        _rule("=") \
+        "use " + char(34) + char(36) + "{mdf_raw_" + shortnm + "}/" + leaf + char(34) + ", clear" \
+        ""))
+}
+
+//  1 inserted, 0 the generated block is not where the template puts it (an
+//  edited file travels as it is), -1 the file could not be rewritten.
+real scalar _mdf_dlv_loadline(string scalar path, real scalar k,
+                              string scalar lbl, string scalar leaf,
+                              string scalar shortnm)
+{
+    string colvector L, R
+    string scalar call, eol
+    real scalar i, at, ban, stop, ins, fh
+
+    if (!fileexists(path)) return(0)
+    L = cat(path)
+    if (rows(L) == 0) return(0)
+    eol = (substr(L[1], -1, 1) == char(13) ? char(13) : "")
+    for (i = 1; i <= rows(L); i++) {
+        if (strlen(L[i]) > 0 & substr(L[i], -1, 1) == char(13)) L[i] = substr(L[i], 1, strlen(L[i]) - 1)
+    }
+    //  The dataset's generated labeling call, then its LOAD banner above it —
+    //  never searching past another dataset's call.
+    call = "do " + char(34) + char(36) + "dofiles_dir/01_Labeling.do" + char(34) + " " + strofreal(k)
+    at = 0
+    for (i = 1; i <= rows(L); i++) {
+        if (at == 0 & strtrim(L[i]) == call) at = i
+    }
+    if (at == 0) return(0)
+    ban = 0
+    stop = 0
+    for (i = at - 1; i >= 1; i--) {
+        if (ban == 0 & stop == 0) {
+            if (strpos(L[i], "LOAD, LABEL AND TRANSLATE") > 0) ban = i
+            else if (strpos(L[i], "dofiles_dir/01_Labeling.do") > 0) stop = 1
+        }
+    }
+    if (ban == 0) return(0)
+    ins = ban
+    if (ban > 1) {
+        if (substr(L[ban - 1], 1, 4) == "*---") ins = ban - 1
+    }
+    R = (ins > 1 ? L[|1 \ ins - 1|] : J(0, 1, "")) \ _dlv_load_block(lbl, leaf, shortnm) \ L[|ins \ rows(L)|]
+
+    unlink(path)
+    fh = _fopen(path, "w")
+    if (fh < 0) return(-1)
+    for (i = 1; i <= rows(R); i++) fwrite(fh, R[i] + eol + char(10))
+    fclose(fh)
+    return(1)
+}
+
 //  The translation engine: mode apply | export | full (ADR-034). Moved here
 //  verbatim from the 11.0.0 module; it now runs from _mdf/mdf_translation.do.
 void write_translation_body(real scalar fh, string scalar q, string scalar bt,

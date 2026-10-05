@@ -1,7 +1,7 @@
 *! mdf_deliverables.ado — Master DO File pipeline stage 19 of 19
 *! version 11.1.2   github.com/adinkhan7/master-do-file
 *!
-*!  build the client handover package (ADR-059, amending ADR-057)
+*!  build the client handover package (ADR-059, amending ADR-057; ADR-064)
 *!
 *!  Written only when run_deliverables = 1. At 0 this stage returns before it
 *!  touches anything, so the ordinary workflow is untouched.
@@ -14,12 +14,22 @@
 *!        02_Import & Raw files/           the raw dataset, its import DO + CSV
 *!        03_Processing Files/             the project's Processing DO
 *!          01_Do Files/                   01_Labeling.do, 02_Translation.do
-*!          02_Translation/                01_Exported/, 02_Translated/
+*!            _mdf/                        the runtime — a HIDDEN folder
+*!          02_Translation/                the returned translation files
 *!          03_Data/                       the analyst's support files
 *!        04_Cleaned Data/                 the cleaned dataset
 *!
 *!  With several datasets the same four folders appear once per dataset, under
-*!  08_Deliverables/NN_<dataset>/, each carrying that dataset alone.
+*!  08_Deliverables/NN_<dataset>/, each carrying that dataset alone; its
+*!  returned translation files sit in 02_Translation/NN_<dataset>/. A folder
+*!  with nothing to put in it is not made.
+*!
+*!  The runtime stays at 01_Do Files/_mdf/ because every Processing, Labeling
+*!  and Translation DO since 11.1.0 recognises its package by that path. It is
+*!  hidden, as the project's own _mdf/ is, so the client sees only their files.
+*!  The package's copy of the Processing DO gains one marked line per dataset
+*!  that loads that dataset's raw data on its own, for debugging; the project's
+*!  own Processing DO is never touched.
 *!
 *!  It reproduces by standing on package mode in the generated files: copied
 *!  anywhere, the Processing DO inside 03_Processing Files/ recognises the
@@ -103,6 +113,9 @@ program define mdf_deliverables
     local _nds = $actual_n_dta
     local _warn 0
     global hfcsys_dlv_fail 0
+    *  The project's short name: the folder a too-long package is told to move
+    *  to, and the name of its raw-data global for the load line (ADR-064).
+    local _short = substr(ustrregexra("$project_name", "[^A-Za-z0-9]+", "_"), 1, 24)
 
     forvalues _k = 1/`_nds' {
         local _nm "${auto_dsname_`_k'}"
@@ -113,9 +126,7 @@ program define mdf_deliverables
         local _B "`_pk'/02_Import & Raw files"
         local _C "`_pk'/03_Processing Files"
         local _D "`_pk'/04_Cleaned Data"
-        foreach _d in "`_pk'" "`_A'" "`_B'" "`_C'" "`_C'/01_Do Files" "`_C'/02_Translation" ///
-                      "`_C'/02_Translation/01_Exported" "`_C'/02_Translation/02_Translated"  ///
-                      "`_C'/03_Data" "`_D'" {
+        foreach _d in "`_pk'" "`_A'" "`_B'" "`_C'" "`_C'/01_Do Files" "`_C'/03_Data" "`_D'" {
             _hfc_mkdir "`_d'"
         }
         if `_nds' > 1 di as result _n "  DS`_k' → `_nn'_`_nm'/"
@@ -247,6 +258,7 @@ program define mdf_deliverables
         }
         if `"`_snap'"' == "" local _snap `"`_pos'"'
         local _st ""
+        local _rawok 0
         local _rsig ""
         local _robs ""
         if `"`_snap'"' != "" {
@@ -338,10 +350,26 @@ program define mdf_deliverables
         *  03  THE PROCESSING WORKFLOW
         *==========================================================================*
         _mdf_dlv_copy "$processing_dir/$processing_file" `"`_C'/$processing_file"'
-        if r(ok) di as result "    workflow      → 03_Processing Files/$processing_file"
+        local _procok = r(ok)
+        if `_procok' di as result "    workflow      → 03_Processing Files/$processing_file"
         else {
             di as error "    WARNING: could not copy $processing_file into the package."
             local _warn = `_warn' + 1
+        }
+        *  The package's copy only: one marked line above this dataset's block
+        *  that loads its raw data on its own, through the path the package's
+        *  INITIALISE sets — so it holds wherever the package is moved.
+        if `_v111' & `_procok' & `_rawok' {
+            local _lbl "`_nm'"
+            if `_nds' > 1 local _lbl "DS`_k': `_nm'"
+            local _ll 0
+            mata: st_local("_ll", strofreal(_mdf_dlv_loadline(st_local("_C") + "/" + st_global("processing_file"), `_k', st_local("_lbl"), st_local("_st") + ".dta", st_local("_short"))))
+            if `_ll' == 1 di as result "    load line     → $processing_file: use .../`_st'.dta, for debugging"
+            else if `_ll' == -1 {
+                di as error "    NOT WRITTEN: $processing_file (adding the dataset's load line)"
+                global hfcsys_dlv_fail = $hfcsys_dlv_fail + 1
+            }
+            else di as txt "    NOTE: DS`_k''s generated block was not found in $processing_file; no load line added."
         }
         *  The two modules the Processing DO calls. Audio, the directory file,
         *  the overrides and the HFC DO serve the project, not the rebuild.
@@ -356,10 +384,13 @@ program define mdf_deliverables
         *  The runtime (ADR-061): the engines this project ran, byte for byte;
         *  the package's own context builder; the framework helpers the DO
         *  files call. The package needs nothing else from this framework.
+        *  Hidden like the project's own _mdf/: framework code, not the
+        *  client's. It cannot move — the DO files find their package by it.
         if `_v111' {
             local _R "`_C'/01_Do Files/_mdf"
             _hfc_mkdir "`_R'"
             _hfc_mkdir "`_R'/ado"
+            _hfc_hide "`_R'" 1
             local _rtn 0
             foreach _e in mdf_labeling mdf_translation {
                 _mdf_dlv_copy "$mdf_rt_dir/`_e'.do" `"`_R'/`_e'.do"'
@@ -378,7 +409,7 @@ program define mdf_deliverables
                 else                           _mdf_dlv_copy `"`_fn'"' `"`_R'/ado/`_a'.ado"'
                 if r(ok) local _rtn = `_rtn' + 1
             }
-            di as result "    runtime       → 03_Processing Files/01_Do Files/_mdf/ (`_rtn' file(s))"
+            di as result "    runtime       → 03_Processing Files/01_Do Files/_mdf/ (`_rtn' file(s), hidden)"
             *  A module still on an older template brings its own, older
             *  machinery with it, and with it the defects 11.1.0 removed.
             foreach _m in "01_Labeling.do" "02_Translation.do" {
@@ -394,41 +425,50 @@ program define mdf_deliverables
             }
         }
 
-        *  Translation: this dataset's files. With several datasets each has a
-        *  folder under 01_Exported/ and 02_Translated/, and returned files lying
-        *  loose in 02_Translated/ are what the apply step falls back to when the
-        *  dataset's folder is empty. With one dataset the files sit directly in
-        *  those folders; any an earlier build filed under the dataset's own folder
-        *  are carried too, the legacy ones first so a newer file wins a name clash.
-        local _ntr 0
-        foreach _leg in "01_Exported" "02_Translated" {
-            local _srcs `""$translation_dir/`_leg'/`_nm'""'
-            if `_nds' == 1 local _srcs `""$translation_dir/`_leg'/`_nm'" "$translation_dir/`_leg'""'
-            local _nleg 0
-            *  Flat in the package: it carries one dataset, and the dataset's
-            *  name twice on the path pushed real files past 260 characters.
-            foreach _td of local _srcs {
-                local _tf ""
-                cap local _tf : dir "`_td'" files "*", respectcase
-                foreach _x of local _tf {
-                    if substr(`"`_x'"', 1, 1) == "~" continue
-                    _mdf_dlv_copy `"`_td'/`_x'"' `"`_C'/02_Translation/`_leg'/`_x'"'
-                    if r(ok) local _nleg = `_nleg' + 1
-                }
+        *  Translation: the returned files this dataset's rebuild applies. What
+        *  was sent out (01_Exported/) is not needed to rebuild and does not
+        *  travel. In the package the files sit directly in 02_Translation/ with
+        *  one dataset, and in 02_Translation/NN_<dataset>/ with several — the
+        *  name the dataset's own package folder has. The package's runtime
+        *  reads them there; the folder is made only when there are files.
+        *  Sources, as the project's apply step reads them: with several
+        *  datasets the dataset's folder under 02_Translated/, else the loose
+        *  files naming it; with one dataset 02_Translated/ itself, after any an
+        *  earlier build filed under the dataset's own folder, so a newer file
+        *  wins a name clash.
+        local _trel "02_Translation"
+        if `_nds' > 1 local _trel "02_Translation/`_nn'_`_nm'"
+        local _srcs `""$translation_dir/02_Translated/`_nm'""'
+        if `_nds' == 1 local _srcs `""$translation_dir/02_Translated/`_nm'" "$translation_dir/02_Translated""'
+        local _tlist ""
+        foreach _td of local _srcs {
+            local _tf ""
+            cap local _tf : dir "`_td'" files "*", respectcase
+            local _tf : list sort _tf
+            foreach _x of local _tf {
+                if substr(`"`_x'"', 1, 1) != "~" local _tlist `"`_tlist' `"`_td'/`_x'"'"'
             }
-            if "`_leg'" == "02_Translated" & `_nleg' == 0 & `_nds' > 1 {
-                local _pat "*`_nm'*.xlsx"
-                local _tf ""
-                cap local _tf : dir "$trans_translated_dir" files "`_pat'", respectcase
-                foreach _x of local _tf {
-                    if substr(`"`_x'"', 1, 1) == "~" continue
-                    _mdf_dlv_copy `"$trans_translated_dir/`_x'"' `"`_C'/02_Translation/02_Translated/`_x'"'
-                    if r(ok) local _nleg = `_nleg' + 1
-                }
-            }
-            local _ntr = `_ntr' + `_nleg'
         }
-        di as result "    translation   → 03_Processing Files/02_Translation/ (`_ntr' file(s))"
+        if `"`_tlist'"' == "" & `_nds' > 1 {
+            local _tf ""
+            cap local _tf : dir "$trans_translated_dir" files "*`_nm'*.xlsx", respectcase
+            local _tf : list sort _tf
+            foreach _x of local _tf {
+                if substr(`"`_x'"', 1, 1) != "~" local _tlist `"`_tlist' `"$trans_translated_dir/`_x'"'"'
+            }
+        }
+        local _ntr 0
+        if `"`_tlist'"' != "" {
+            _hfc_mkdir "`_C'/02_Translation"
+            _hfc_mkdir "`_C'/`_trel'"
+            foreach _x of local _tlist {
+                local _leaf = ustrregexra(`"`_x'"', "^.*/", "")
+                _mdf_dlv_copy `"`_x'"' `"`_C'/`_trel'/`_leaf'"'
+                if r(ok) local _ntr = `_ntr' + 1
+            }
+            di as result "    translation   → 03_Processing Files/`_trel'/ (`_ntr' file(s))"
+        }
+        else di as txt "    translation   : no returned files, so no 02_Translation/ folder"
 
         *  Support files the analyst keeps for the cleaning to read. The
         *  framework's own staged copy of the raw export is not one of them: the
@@ -468,7 +508,6 @@ program define mdf_deliverables
         if `_v111' {
             *  ── The package's identity and settings (ADR-061) ─────────────────
             local _setf "`_C'/01_Do Files/_mdf/mdf_package.do"
-            local _short = substr(ustrregexra("$project_name", "[^A-Za-z0-9]+", "_"), 1, 24)
             mata: write_package_settings()
             cap confirm file `"`_setf'"'
             if _rc {

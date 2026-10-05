@@ -1,11 +1,13 @@
 *! _mdf_rt_package.ado — the runtime a Deliverables package carries (ADR-061)
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.2   github.com/adinkhan7/master-do-file
 *!
 *!  Not an ado-command: a do-file with an .ado extension, because -net install-
 *!  ships program files only (the reason _mdf_defs.ado is named as it is). The
 *!  Deliverables builder copies it into every package as
 *!
 *!      03_Processing Files/01_Do Files/_mdf/mdf_runtime.do
+*!
+*!  in a folder it marks hidden (ADR-064).
 *!
 *!  and the package's DO files run it from their INITIALISE block, having found
 *!  the package by walking up from Stata's working directory. It gives them a
@@ -282,8 +284,18 @@ global dofiles_dir          `"$processing_dir/01_Do Files"'
 global hfc_dofiles_dir      `"$dofiles_dir"'
 global processing_data_dir  `"$processing_dir/03_Data"'
 global translation_dir      `"$processing_dir/02_Translation"'
-global trans_exported_dir   `"$translation_dir/01_Exported"'
-global trans_translated_dir `"$translation_dir/02_Translated"'
+*  The returned translation files (ADR-064): directly in 02_Translation/ with
+*  one dataset; with several, this package's dataset's own folder in it,
+*  02_Translation/NN_<dataset>/ — the name the package folder itself has.
+global trans_translated_dir `"$translation_dir"'
+if $mdf_pk_nds > 1 {
+    forvalues _k = 1/$mdf_pk_nds {
+        if "${mdf_pk_here_`_k'}" == "1" {
+            local _nn : display %02.0f `_k'
+            global trans_translated_dir `"$translation_dir/`_nn'_${mdf_pk_name_`_k'}"'
+        }
+    }
+}
 global surv_inst_dir        `"`_pk'"'
 global capi_dir             `"`_pk'/01_CAPI & Questionnaire"'
 global quest_dir            `"$capi_dir"'
@@ -291,10 +303,12 @@ global data_dir             `"`_raw'"'
 global raw_data_dir         `"`_raw'"'
 global hfc_rawdata_dir      `"`_raw'"'
 global hfc_raw_snapshot_dir `"`_raw'"'
+*  The same folder under a name only this project's package sets, for the
+*  LOAD DATASET lines of its Processing DO (ADR-064): after another project's
+*  INITIALISE they find no file, rather than that project's file.
+global mdf_raw_$mdf_pk_short `"`_raw'"'
 global clean_dir            `"`_pk'/04_Cleaned Data"'
-foreach _d in "$trans_exported_dir" "$trans_translated_dir" "$clean_dir" {
-    cap mkdir `"`_d'"'
-}
+cap mkdir `"$clean_dir"'
 
 *  The cleaned dataset is the only thing written into the package. The dated
 *  working copy the workflow saves on the way goes to Stata's temp folder.
@@ -309,6 +323,9 @@ global hfc_keys_audio_dir   `"$hfc_keys_dir/02_Audio_Keys"'
 global hfc_keys_trans_dir   `"$hfc_keys_dir/03_Translation_Keys"'
 global hfc_keys_master_dir  `"$hfc_keys_hfc_dir"'
 global hfc_flag_dir         `"$hfc_keys_dir/.flag_history"'
+*  A rebuild never sends text out (exportopenended = 0); were anything to
+*  write there, it would land here, never in the package.
+global trans_exported_dir   `"$mdf_out/01_Exported"'
 foreach _d in "$mdf_out" "$hfc_keys_dir" "$hfc_keys_hfc_dir" "$hfc_keys_audio_dir" "$hfc_keys_trans_dir" "$hfc_flag_dir" {
     cap mkdir `"`_d'"'
 }

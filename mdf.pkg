@@ -12,7 +12,7 @@ d here.
 d
 d Requires: Stata 16 or newer.
 d
-d Distribution-Date: 20261003
+d Distribution-Date: 20261005
 d Author: Adin Khan
 d Support: https://github.com/adinkhan7/master-do-file
 f _hfc_abort.ado

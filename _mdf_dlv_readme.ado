@@ -1,5 +1,5 @@
 *! _mdf_dlv_readme.ado — the README a Deliverables package opens with (ADR-061)
-*! version 11.1.0   github.com/adinkhan7/master-do-file
+*! version 11.1.2   github.com/adinkhan7/master-do-file
 *!
 *!  One per dataset package: what is in it, how to rebuild the cleaned dataset,
 *!  and what the rebuild checks before it does. Written by mdf_deliverables.
@@ -42,12 +42,25 @@ program define _mdf_dlv_readme
     file write `_fh' "No installation of the Master DO File framework is needed. The survey commands the" _n
     file write `_fh' "processing uses (odksplit, inputcorrection and any the cleaning names) are installed" _n
     file write `_fh' "automatically when missing, which needs an internet connection." _n _n
+    local _tr "02_Translation/"
+    if `_nds' > 1 {
+        local _nn : display %02.0f `_k'
+        local _tr "02_Translation/`_nn'_`_nm'/"
+    }
+    file write `_fh' "## Looking at the data step by step" _n _n
+    file write `_fh' "$processing_file opens the dataset's block with a line marked" _n
+    file write `_fh' "**LOAD DATASET INTO MEMORY**. Run section 0. INITIALISE once (select it, Ctrl+D), then" _n
+    file write `_fh' "select that one  use  line and press Ctrl+D: the raw data is in memory, and the steps" _n
+    file write `_fh' "below it can be run one at a time." _n _n
     file write `_fh' "## Where to look" _n _n
     file write `_fh' "- The cleaning itself: $processing_file, sections marked **SAFE TO EDIT**." _n
     file write `_fh' "- Labels added by hand: 01_Do Files/01_Labeling.do, section MANUAL LABELING." _n
     file write `_fh' "- Translation corrections added by hand: 01_Do Files/02_Translation.do." _n
-    file write `_fh' "- Returned translation files: 02_Translation/02_Translated/." _n
-    file write `_fh' "- 01_Do Files/_mdf/: the framework runtime the files above call, and the package's" _n
-    file write `_fh' "  identity and settings (mdf_package.do). Framework code — not for editing." _n
+    file write `_fh' "- Returned translation files: 03_Processing Files/`_tr' (absent if there were none)." _n _n
+    file write `_fh' "## Keep the package whole" _n _n
+    file write `_fh' "The framework code the DO files call is in 03_Processing Files/01_Do Files/_mdf/, a" _n
+    file write `_fh' "hidden folder: nothing in it is for editing, but the package cannot run without it. Copy" _n
+    file write `_fh' "or zip the whole package folder with File Explorer (Send to > Compressed folder) or" _n
+    file write `_fh' "7-Zip. PowerShell's Compress-Archive leaves hidden folders out." _n
     file close `_fh'
 end
