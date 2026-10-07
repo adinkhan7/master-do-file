@@ -1,5 +1,5 @@
 *! _mdf_dlv_readme.ado — the README a Deliverables package opens with (ADR-061)
-*! version 11.1.2   github.com/adinkhan7/master-do-file
+*! version 11.1.3   github.com/adinkhan7/master-do-file
 *!
 *!  One per dataset package: what is in it, how to rebuild the cleaned dataset,
 *!  and what the rebuild checks before it does. Written by mdf_deliverables.
@@ -48,10 +48,10 @@ program define _mdf_dlv_readme
         local _tr "02_Translation/`_nn'_`_nm'/"
     }
     file write `_fh' "## Looking at the data step by step" _n _n
-    file write `_fh' "$processing_file opens the dataset's block with a line marked" _n
-    file write `_fh' "**LOAD DATASET INTO MEMORY**. Run section 0. INITIALISE once (select it, Ctrl+D), then" _n
-    file write `_fh' "select that one  use  line and press Ctrl+D: the raw data is in memory, and the steps" _n
-    file write `_fh' "below it can be run one at a time." _n _n
+    file write `_fh' "In $processing_file each dataset's block opens with a line under **LOAD DATASET**." _n
+    file write `_fh' "Run section 0. INITIALISE once (select it, Ctrl+D), then select that one line and press" _n
+    file write `_fh' "Ctrl+D: the dataset's raw data is in memory, and the steps below it can be run one at a" _n
+    file write `_fh' "time. A full run of the file skips the line." _n _n
     file write `_fh' "## Where to look" _n _n
     file write `_fh' "- The cleaning itself: $processing_file, sections marked **SAFE TO EDIT**." _n
     file write `_fh' "- Labels added by hand: 01_Do Files/01_Labeling.do, section MANUAL LABELING." _n

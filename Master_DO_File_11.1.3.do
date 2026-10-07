@@ -27,7 +27,7 @@ cap noi net install export_hfc, from("https://raw.githubusercontent.com/adinkhan
 net install recode_oth, from("https://raw.githubusercontent.com/ashikpydev/recode_oth/main/") replace
 cap noi ssc install odksplit
 *==============================================================================*
-*  Master DO File version 11.1.2
+*  Master DO File version 11.1.3
 *==============================================================================*
 clear all
 set more off
@@ -126,7 +126,7 @@ global verbose              1                    // 1 = use 'cap noi' for debugg
 
 *  ── Framework package ────────────────────────────────────────────────────────
 global mdf_autoinstall      1                    // 1 = update the framework when needed, 0 = never touch the network
-global mdf_required         "11.1.2"             // framework version this file expects
+global mdf_required         "11.1.3"             // framework version this file expects
 global mdf_source           "https://raw.githubusercontent.com/adinkhan7/master-do-file/main"  // package home
 
 *==============================================================================*

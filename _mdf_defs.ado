@@ -1,5 +1,5 @@
 *! _mdf_defs.ado — the Mata layer for the Master DO File framework
-*! version 11.1.2   github.com/adinkhan7/master-do-file
+*! version 11.1.3   github.com/adinkhan7/master-do-file
 *!
 *!  Loaded on demand by _mdf_load.ado. Never run this file directly.
 *!
@@ -3616,6 +3616,52 @@ void write_init_block(real scalar fh, string scalar q, string scalar bt,
     fput(fh, "    }")
     fput(fh, "    mdf_bootstrap " + bt + q + dol + "mdf_want_at" + q + ap)
     fput(fh, "}")
+    fput(fh, "local _mdf_full 1    // a full run: the LOAD DATASET lines are skipped")
+}
+
+//  ── The LOAD DATASET line (ADR-065) ──────────────────────────────────────
+//  One line per dataset that puts it in memory, so a block of code can be run
+//  without everything above it: section 0 once, then the line on its own
+//  (select, Ctrl+D). A full run of the file skips it: its INITIALISE sets the
+//  local _mdf_full, and a selection run on its own has no such local. Without
+//  the skip, the line in 02_Translation.do would replace the labelled data in
+//  memory in the middle of processing.
+//    how = "raw"     mdf_use: the raw data exactly as the labeling step loads it
+//    how = "target"  ${target_dta_k}, the dataset the file works on (cleaned,
+//                    else raw) — a plain -use-, so the HFC DO keeps running
+//                    where the framework is not installed (ADR-056)
+string scalar _load_line(string scalar how, real scalar k, string scalar pname,
+                         string scalar nm)
+{
+    string scalar q, s, ks
+    q = char(34)
+    ks = strofreal(k)
+    s = "if " + q + char(96) + "_mdf_full" + char(39) + q + " == " + q + q + " "
+    if (how == "target") s = s + "use " + q + char(36) + "{target_dta_" + ks + "}" + q + ", clear"
+    else s = s + "mdf_use " + ks + ", project(" + q + pname + q + ")"
+    if (nm != "") s = s + "    // DS" + ks + ": " + nm
+    return(s)
+}
+
+string colvector _load_notes(string scalar how)
+{
+    if (how == "target") return(("Run section 0, then select one line and press Ctrl+D: that dataset" \
+                                 "(cleaned, else raw) is in memory. A full run skips these lines."))
+    return(("Run section 0, then select one line and press Ctrl+D: that dataset's" \
+            "raw data is in memory. A full run of this file skips these lines."))
+}
+
+//  The section for a module file: one line per dataset, right after INITIALISE.
+void write_load_section(real scalar fh, string scalar how, string scalar pname,
+                        string scalar nds)
+{
+    real scalar _k, nb
+    nb = strtoreal(nds)
+    if (nb >= . | nb < 1) nb = 1
+    mdf_gen_section(fh, "LOAD DATASET", _load_notes(how))
+    for (_k = 1; _k <= nb; _k++) {
+        fput(fh, _load_line(how, _k, pname, st_global("auto_dsname_" + strofreal(_k))))
+    }
 }
 
 //  ── Carrying an analyst's cleaning into a newer template ──────────────────
@@ -3806,6 +3852,8 @@ void write_processing_do(string scalar procdir, string scalar procfile,
             B = carry_region(L, _k, 2)
         }
 
+        mdf_gen_section(fh, "LOAD DATASET  —  " + full_lbl, _load_notes("raw"))
+        fput(fh, _load_line("raw", _k, pname, ""))
         mdf_gen_section(fh, "1. LOAD, LABEL AND TRANSLATE  —  " + full_lbl,
             ("Loads the raw data and applies the CAPI labels and your manual labels" \
              "(01_Do Files/01_Labeling.do), then the returned translations and your" \
@@ -3952,6 +4000,7 @@ void write_labeling_do(string scalar dodir, string scalar tver, string scalar pn
     fput(fh, "args _mdf_ds")
     fput(fh, "if " + q + bt + "_mdf_ds" + ap + q + " == " + q + q + " local _mdf_ds 1")
     write_init_block(fh, q, bt, ap, dol, pname, "labeling", 0)
+    write_load_section(fh, "raw", pname, nds)
     mdf_edit_section(fh, "ODKSplit Name Overrides", "1. ODKSPLIT NAME OVERRIDES",
         ("odksplit stops when a variable's name is too long for the Stata" \
          "macros it builds (" + q + "local macro name ... too long" + q + "). MDF finds" \
@@ -3999,6 +4048,7 @@ void write_translation_do(string scalar dodir, string scalar tver, string scalar
     fput(fh, "")
     fput(fh, "args _mdf_mode _mdf_ds")
     write_init_block(fh, q, bt, ap, dol, pname, "translation", 0)
+    write_load_section(fh, "raw", pname, nds)
     mdf_gen_section(fh, "1. RETURNED TRANSLATIONS",
         ("Every returned .xlsx in 02_Translation/02_Translated/ is applied, in" \
          "name order (framework code: 01_Do Files/_mdf/mdf_translation.do)."))
@@ -4030,6 +4080,7 @@ void write_audio_do(string scalar dodir, string scalar tver, string scalar pname
         _howto_run())
     fput(fh, tier2_marker(tver))
     write_init_block(fh, q, bt, ap, dol, pname, "audio", 1)
+    write_load_section(fh, "target", pname, nds)
     mdf_gen_section(fh, "1. AUDIO SAMPLE", J(0, 1, ""))
     write_audio_body(fh, q, bt, ap, dol, nds)
     fclose(fh)
@@ -4146,7 +4197,8 @@ string colvector _dlv_load_block(string scalar lbl, string scalar leaf,
 }
 
 //  1 inserted, 0 the generated block is not where the template puts it (an
-//  edited file travels as it is), -1 the file could not be rewritten.
+//  edited file travels as it is), 2 the file has its own LOAD DATASET lines
+//  (an 11.1.3 template, ADR-065), -1 the file could not be rewritten.
 real scalar _mdf_dlv_loadline(string scalar path, real scalar k,
                               string scalar lbl, string scalar leaf,
                               string scalar shortnm)
@@ -4162,6 +4214,7 @@ real scalar _mdf_dlv_loadline(string scalar path, real scalar k,
     for (i = 1; i <= rows(L); i++) {
         if (strlen(L[i]) > 0 & substr(L[i], -1, 1) == char(13)) L[i] = substr(L[i], 1, strlen(L[i]) - 1)
     }
+    if (sum(strpos(L, "mdf_use ") :> 0) > 0) return(2)
     //  The dataset's generated labeling call, then its LOAD banner above it —
     //  never searching past another dataset's call.
     call = "do " + char(34) + char(36) + "dofiles_dir/01_Labeling.do" + char(34) + " " + strofreal(k)
@@ -4460,6 +4513,8 @@ void mdf_modules_main()
         fput(fh, "version 16")
         fput(fh, "")
         module_header(fh, q, bt, ap, dol, pname, nds, "core")
+        fput(fh, "local _mdf_full 1    // a full run: the LOAD DATASET lines are skipped")
+        write_load_section(fh, "target", pname, nds)
         mdf_gen_section(fh, "1. RUN SETTINGS", J(0, 1, ""))
         fput(fh, "*  ── System dates ───────────────────────────────────────────────────────────")
         fput(fh, "local sys_today = daily(" + q + bt + "c(current_date)" + ap + q + ", " + q + "DMY" + q + ")")

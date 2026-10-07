@@ -1,5 +1,5 @@
 *! mdf_deliverables.ado — Master DO File pipeline stage 19 of 19
-*! version 11.1.2   github.com/adinkhan7/master-do-file
+*! version 11.1.3   github.com/adinkhan7/master-do-file
 *!
 *!  build the client handover package (ADR-059, amending ADR-057; ADR-064)
 *!
@@ -365,6 +365,7 @@ program define mdf_deliverables
             local _ll 0
             mata: st_local("_ll", strofreal(_mdf_dlv_loadline(st_local("_C") + "/" + st_global("processing_file"), `_k', st_local("_lbl"), st_local("_st") + ".dta", st_local("_short"))))
             if `_ll' == 1 di as result "    load line     → $processing_file: use .../`_st'.dta, for debugging"
+            else if `_ll' == 2 di as result "    load line     : $processing_file has its own (mdf_use)"
             else if `_ll' == -1 {
                 di as error "    NOT WRITTEN: $processing_file (adding the dataset's load line)"
                 global hfcsys_dlv_fail = $hfcsys_dlv_fail + 1
@@ -396,7 +397,7 @@ program define mdf_deliverables
                 _mdf_dlv_copy "$mdf_rt_dir/`_e'.do" `"`_R'/`_e'.do"'
                 if r(ok) local _rtn = `_rtn' + 1
             }
-            foreach _a in _mdf_rt_package _hfc_abort _hfc_pause _hfc_mkdir mdf_core_vars mdf_finalise _mdf_odk_names {
+            foreach _a in _mdf_rt_package _hfc_abort _hfc_pause _hfc_mkdir mdf_core_vars mdf_finalise _mdf_odk_names mdf_use {
                 local _fn ""
                 cap findfile `_a'.ado
                 if !_rc local _fn `"`r(fn)'"'

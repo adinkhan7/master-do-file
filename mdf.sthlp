@@ -1,5 +1,5 @@
 {smcl}
-{* *! version 11.1.2  03oct2026}{...}
+{* *! version 11.1.3  07oct2026}{...}
 {vieweralsosee "[R] net" "help net"}{...}
 {viewerjumpto "Syntax" "mdf##syntax"}{...}
 {viewerjumpto "Description" "mdf##description"}{...}

@@ -22,7 +22,7 @@ global run_import           1
 global run_labeling         1
 ...
 global run_deliverables     1                    // 08_Deliverables/ — client handover package
-global mdf_required         "11.1.2"
+global mdf_required         "11.1.3"
 
 *  Everything below is for system use, no need to make any change.
 mdf_setup         //  helper programs, ROOT resolution, framework version check
@@ -43,7 +43,7 @@ re-run from the Command window while debugging. `mdf run` does the same thing in
 
 ```
 <Project>/
-├─ Master_DO_File_11.1.2.do
+├─ Master_DO_File_11.1.3.do
 ├─ README.md                         generated; explains the project
 ├─ 01_Questionnaire/                 questionnaire documents        (NN_<dataset>/ per dataset)
 ├─ 02_CAPI/                          SurveyCTO form(s); Archive/    (NN_<dataset>/ per dataset)
@@ -110,6 +110,24 @@ global odksplit_rename "var_one var_two"
 A listed variable that does not exist, a short name already in use, or a name that does not come back
 stops the run.
 
+### Working on one block of code
+
+Every generated DO file has a `LOAD DATASET` line per dataset — above each dataset's block in the
+Processing DO, right after section 0 in the others:
+
+```stata
+if "`_mdf_full'" == "" mdf_use 1, project("My Project")    // Processing, Labeling, Translation
+if "`_mdf_full'" == "" use "${target_dta_1}", clear         // Audio, HFC
+```
+
+Run section `0. INITIALISE` once (select it, Ctrl+D), then select the line and press Ctrl+D: the
+dataset is in memory and any block below can be run on its own. `mdf_use` loads the **raw** data,
+exactly the file the labeling step loads (it runs the labeling engine with labeling off and changes
+nothing else); Audio and HFC load the dataset they work on — the cleaned one if it exists, else raw.
+A full run of the file skips the line (its section 0 sets `_mdf_full`). `mdf_use` loads nothing, and
+says why, when section 0 has not been run, when another project's settings are in Stata, or when a
+Deliverables package does not carry that dataset.
+
 ## Where a generated DO file runs
 
 | where it sits | what it does |
@@ -157,12 +175,10 @@ sit in `02_Translation/NN_<dataset>/`. The post-cleaning merge is not part of a 
 package by that path; it is hidden, as the project's own `_mdf/` is. Zip a package with File Explorer
 or 7-Zip — PowerShell's `Compress-Archive` leaves hidden folders out.
 
-**Debugging in the package.** The package's copy of the Processing DO opens each dataset's block with
-a line marked `LOAD DATASET INTO MEMORY`. Run section `0. INITIALISE` once, then that one line —
-`use "${mdf_raw_<project>}/<dataset>.dta", clear` — and the dataset's raw data is in memory, wherever
-the package has been moved. The global is set only by that project's package, so after another
-project's INITIALISE the line finds no file rather than the wrong one. The project's own Processing
-DO is not changed.
+**Debugging in the package.** The package's Processing DO keeps its `LOAD DATASET` lines (see
+*Working on one block of code*), and they work there, wherever the package has been moved. A
+Processing DO still on an 11.1.0–11.1.2 template has none, so the package's copy of it gets one
+instead, above each dataset's block: `use "${mdf_raw_<project>}/<dataset>.dta", clear`.
 
 No daily download folders, no HFC history, no keys, no logs, no Master.
 
@@ -199,7 +215,7 @@ the installed version differs from the one Master pins in `$mdf_required`.
 
 ## Versioning
 
-Master pins the framework it was written against: `global mdf_required "11.1.2"`.
+Master pins the framework it was written against: `global mdf_required "11.1.3"`.
 
 - **Installed framework older than Master** → updated from GitHub; if that is impossible, the run
   stops before doing anything. An older framework cannot know the folders and stages a newer Master
@@ -253,6 +269,7 @@ mdf_<stage>.ado               the 19 pipeline stages, in execution order
 mdf_bootstrap.ado             give a generated file its own project's context (identity-checked)
 mdf_core_vars.ado             derive fielddate / total_duration
 mdf_finalise.ado              post-cleaning merge and publish
+mdf_use.ado                   the LOAD DATASET line: one dataset's raw data in memory
 mdf_deliverables.ado          the client handover package (stage 19)
 _mdf_deliv_legacy.ado         the v10.2.0 package, for Processing DOs on an older template
 _mdf_dlv_copy.ado             copy one file into the package, or say why not

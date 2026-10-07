@@ -1,5 +1,5 @@
 *! mdf_readme.ado — Master DO File pipeline stage 5 of 19
-*! version 11.1.2   github.com/adinkhan7/master-do-file
+*! version 11.1.3   github.com/adinkhan7/master-do-file
 *!
 *!  write the project README
 *!
@@ -291,9 +291,8 @@ program define mdf_readme
         file write `_mf' "With more than one dataset the same four folders appear once per dataset," _n
         file write `_mf' "under `V'/NN_<dataset>/, each holding only that dataset, its returned" _n
         file write `_mf' "translation files in 02_Translation/NN_<dataset>/. The post-cleaning merge" _n
-        file write `_mf' "is not part of a per-dataset package. The package's copy of the Processing" _n
-        file write `_mf' "DO opens each dataset's block with a LOAD DATASET INTO MEMORY line, for" _n
-        file write `_mf' "stepping through the cleaning; the project's own file is not changed." _n
+        file write `_mf' "is not part of a per-dataset package. Its Processing DO keeps the LOAD" _n
+        file write `_mf' "DATASET lines (below), and they work there too." _n
         file write `_mf' "" _n
         file write `_mf' "**How the client reproduces it.** Copy the folder anywhere, open" _n
         file write `_mf' "03_Processing Files/${project_name}_Processing.do in Stata and run it" _n
@@ -320,6 +319,23 @@ program define mdf_readme
             file write `_mf' "until its .new has been merged, run_deliverables builds the flat v10.2.0" _n
             file write `_mf' "package (Data/, CAPI/, Clean_Reference/, output in MDF_Output/) instead." _n
         }
+        file write `_mf' "" _n
+        file write `_mf' "## Working on one block of code" _n _n
+        file write `_mf' "Every generated DO file has LOAD DATASET lines, one per dataset: above each" _n
+        file write `_mf' "dataset's block in the Processing DO, and right after section 0 in the" _n
+        file write `_mf' "Labeling, Translation, Audio and HFC DOs. To run a block without" _n
+        file write `_mf' "everything above it: run section 0. INITIALISE once (select it, Ctrl+D)," _n
+        file write `_mf' "then select the dataset's line and press Ctrl+D." _n
+        file write `_mf' "" _n
+        file write `_mf' "- Processing, Labeling, Translation: mdf_use k, project(...) puts the" _n
+        file write `_mf' "  dataset's RAW data in memory, the file the labeling step loads. Labels and" _n
+        file write `_mf' "  translations are applied by running the lines below it." _n
+        file write `_mf' "- Audio, HFC: the dataset the file works on, the cleaned dataset if there" _n
+        file write `_mf' "  is one, else raw." _n
+        file write `_mf' "" _n
+        file write `_mf' "A full run of the file skips these lines. mdf_use loads nothing, and says" _n
+        file write `_mf' "why, when section 0 has not been run or another project's settings are" _n
+        file write `_mf' "in Stata." _n
         file write `_mf' "" _n
         file write `_mf' "## Where the explanations live" _n _n
         file write `_mf' "The generated DO files carry headings, not essays. Why the framework is" _n

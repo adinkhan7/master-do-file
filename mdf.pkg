@@ -12,7 +12,7 @@ d here.
 d
 d Requires: Stata 16 or newer.
 d
-d Distribution-Date: 20261005
+d Distribution-Date: 20261007
 d Author: Adin Khan
 d Support: https://github.com/adinkhan7/master-do-file
 f _hfc_abort.ado
@@ -50,6 +50,7 @@ f mdf_readme.ado
 f mdf_resolve.ado
 f mdf_setup.ado
 f mdf_stage.ado
+f mdf_use.ado
 f mdf_validate.ado
 f mdf_workdirs.ado
 f mdf.sthlp
