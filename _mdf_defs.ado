@@ -1342,6 +1342,34 @@ void write_odk_names_restore(real scalar fh, string scalar q, string scalar bt,
     fput(fh, "")
 }
 
+//  odksplit 2.1.0 keeps the survey rows of the type its option asks for and
+//  splits them; with none it stops with "no observations", r(2000), and the
+//  dataset is labelled not at all (measured: a form with select_one questions
+//  and no select_multiple). So -multiple- is asked for only when the form has
+//  a select_multiple question and -single- only when it has a select_one,
+//  found the way odksplit finds them. A form with both gets the same call as
+//  before; one that cannot be read here gets all three, as before (ADR-066).
+void write_odk_options(real scalar fh, string scalar q, string scalar bt,
+                       string scalar ap, string scalar sfx, string scalar ind)
+{
+    fput(fh, ind + "local _odk_m 1")
+    fput(fh, ind + "local _odk_s 1")
+    fput(fh, ind + "cap import excel using " + q + "temp_capi" + sfx + ".xlsx" + q + ", sheet(" + q + "survey" + q + ") firstrow clear all")
+    fput(fh, ind + "if !_rc {")
+    fput(fh, ind + "    cap qui count if type != " + q + q + " & regexm(type, " + q + "select_multiple" + q + ")")
+    fput(fh, ind + "    if !_rc & r(N) == 0 local _odk_m 0")
+    fput(fh, ind + "    cap qui count if type != " + q + q + " & regexm(type, " + q + "select_one" + q + ")")
+    fput(fh, ind + "    if !_rc & r(N) == 0 local _odk_s 0")
+    fput(fh, ind + "}")
+    fput(fh, ind + "clear")
+    fput(fh, ind + "local _odk_opt " + q + "varlabel" + q)
+    fput(fh, ind + "if " + bt + "_odk_s" + ap + " local _odk_opt " + q + "single " + bt + "_odk_opt" + ap + q)
+    fput(fh, ind + "if " + bt + "_odk_m" + ap + " local _odk_opt " + q + "multiple " + bt + "_odk_opt" + ap + q)
+    fput(fh, ind + "if !" + bt + "_odk_m" + ap + " di as txt " + q + "  The form has no select_multiple question: odksplit is not asked to split any." + q)
+    fput(fh, ind + "if !" + bt + "_odk_s" + ap + " di as txt " + q + "  The form has no select_one question: odksplit is not asked for their value labels." + q)
+    fput(fh, "")
+}
+
 void write_odksplit_call(real scalar fh, string scalar q, string scalar bt,
                          string scalar ap, string scalar dol,
                          string scalar sfx, string scalar form, string scalar ind)
@@ -1357,10 +1385,11 @@ void write_odksplit_call(real scalar fh, string scalar q, string scalar bt,
     fput(fh, ind + "cap copy " + q + bt + "_f" + ap + q + " " + q + "temp_data" + sfx + ".dta" + q + ", replace")
     fput(fh, "")
     write_odk_names_prepare(fh, q, bt, ap, dol, sfx, ind)
+    write_odk_options(fh, q, bt, ap, sfx, ind)
     fput(fh, ind + bt + "_odk_cap" + ap + " odksplit,                              ///")
     fput(fh, ind + "    survey(" + q + "temp_capi" + sfx + ".xlsx" + q + ")        ///")
     fput(fh, ind + "    data(" + q + "temp_data" + sfx + ".dta" + q + ")           ///")
-    fput(fh, ind + "    label(" + q + dol + "capi_language" + q + ") multiple single varlabel clear")
+    fput(fh, ind + "    label(" + q + dol + "capi_language" + q + ") " + bt + "_odk_opt" + ap + " clear")
     fput(fh, ind + "local _odksplit_rc = _rc")
     fput(fh, "")
     fput(fh, ind + "cap erase " + q + "temp_capi" + sfx + ".xlsx" + q)

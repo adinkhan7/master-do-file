@@ -110,6 +110,13 @@ global odksplit_rename "var_one var_two"
 A listed variable that does not exist, a short name already in use, or a name that does not come back
 stops the run.
 
+### Forms without select_multiple (or without select_one) questions
+
+`odksplit` stops with "no observations" when it is asked to split select_multiple questions and the form
+has none (likewise for select_one), and the dataset would then get no labels at all. The labeling engine
+reads the form first and asks `odksplit` only for the question types the form has; the log says when it
+leaves one out. A form with both types is labelled exactly as before.
+
 ### Working on one block of code
 
 Every generated DO file has a `LOAD DATASET` line per dataset — above each dataset's block in the
